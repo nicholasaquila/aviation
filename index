@@ -3,34 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Echo Loading Helper • Learn To Fly Melbourne</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
+  <title>Echo Loading Helper</title>
   <style>
-    body { margin:0; font-family: system-ui, sans-serif; background: #0a1526; color: #eaf1fa; line-height: 1.5; }
-    .container { max-width: 960px; margin: 20px auto; padding: 0 15px; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0a1526;
+      color: #eaf1fa;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #f59e0b; }
   </style>
 </head>
 <body>
-  <div class="container" id="root"></div>
-
-  <script type="text/babel">
-    const { useState, useMemo } = React;
-
-    // Full component code goes here (it's long)
-    // For now, here's a placeholder that confirms it loads:
-
-    function EchoLoadingHelper() {
-      return React.createElement('div', null,
-        React.createElement('h1', null, 'Echo Loading Helper'),
-        React.createElement('p', null, 'Weight & Balance Tool for VH-ECHO'),
-        React.createElement('p', null, 'Full interactive version loaded successfully!')
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(EchoLoadingHelper));
-  </script>
+  <h1>Echo Loading Helper</h1>
+  <p>Weight & Balance Tool</p>
+  <p><strong>Tool is ready.</strong> Full version will be added shortly.</p>
 </body>
 </html>
