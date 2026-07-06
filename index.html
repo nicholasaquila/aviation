@@ -13,7 +13,6 @@
 </head>
 <body>
 <div id="root"><div id="boot">Loading Echo Loading Helper…</div></div>
-
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script>
@@ -61,11 +60,12 @@ const ECHO = {
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
-  tag: "v0.6",
+  tag: "v0.7",
   date: "2026-07-07",
-  note: "IU chart: project before/after points to weight axis with Δweight bracket"
+  note: "IU loading chart is now the default graph view"
 };
 // changelog:
+//  v0.7 — IU loading chart defaults on; pre-compiled build for reliable GitHub Pages load
 //  v0.6 — IU loading chart projects each point across to the weight axis + Δweight (add/remove) bracket
 //  v0.5 — dual graphs: CG-vs-weight + index(IU)-vs-weight loading chart, toggle, version marker
 //  v0.4 — practice variant selector (drill each Echo loading type individually)
@@ -765,7 +765,7 @@ function EchoLoadingHelper() {
   const [fixType, setFixType] = useState("add");
   const [station, setStation] = useState("fwd");
   const [side, setSide] = useState("auto");
-  const [graphView, setGraphView] = useState("cg");
+  const [graphView, setGraphView] = useState("iu");
   const [q, setQ] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [variant, setVariant] = useState("all");
