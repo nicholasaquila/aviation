@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Echo Loading Helper • Weight & Balance</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    h1 { color: #f59e0b; }
+    .eh-svg { width: 100%; max-width: 700px; background: white; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Echo Loading Helper</h1>
+    <p>Weight & Balance • CG Envelope • CASA Echo</p>
+    <div id="root"></div>
+  </div>
+
+  <script type="text/babel" src="EchoLoadingHelper.jsx"></script>
+  <script type="text/babel">
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(EchoLoadingHelper));
+  </script>
+</body>
+</html>
