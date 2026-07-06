@@ -1,0 +1,676 @@
+import React, { useState, useMemo } from "react";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ECHO LOADING HELPER  ·  Learn To Fly Melbourne
+   Weight & Balance only (CG · ballast · fuel · limits) + graphical CG envelope
+   CASA Workbook v3.0a — Loading System Echo
+   ────────────────────────────────────────────────────────────────────────── */
+
+const ECHO = {
+  MTOW: 2950, MLW: 2725, MZFW: 2630,
+  AFT_LIMIT: 2680,           // mm, constant all weights
+  MAC_LEN: 1900, MAC_LE: 2190,
+  KG_PER_USG: 2.72,
+  MIN_W: 1900,               // envelope floor for drawing
+  arms: {
+    fwd: 500, row1: 2290, row2: 3300, row3: 4300,
+    mainTank: 1780, auxTank: 2800, leftWing: 3550, rightWing: 3550, rear: 5000,
+  },
+  maxLoad: { fwd: 55, leftWing: 55, rightWing: 55, rear: 155 },
+};
+
+const STATION_LABEL = {
+  fwd: "forward compartment", row1: "row 1", row2: "row 2", row3: "row 3",
+  mainTank: "main tanks", auxTank: "aux tanks",
+  leftWing: "left wing locker", rightWing: "right wing locker", rear: "rear compartment",
+};
+
+// Forward limit: 2400 up to 2360 kg; slopes rearward 0.27 mm/kg to 2560 @ 2950 kg
+function fwdLimit(w) {
+  if (w <= 2360) return 2400;
+  if (w >= 2950) return 2560;
+  return (w - 2360) * 0.27 + 2400;
+}
+const aftLimit = () => ECHO.AFT_LIMIT;
+
+const fmt = (n, d = 1) =>
+  n === null || n === undefined || Number.isNaN(n)
+    ? "—"
+    : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const cgFromIU = (iu, w) => (iu * 10000) / w;
+const iuFromWA = (w, a) => (w * a) / 10000;
+
+// Bisection: solve for the weight (add/remove) at arm `a` that lands the
+// post-load point exactly on a moving limit (fwd) or fixed limit (aft).
+function solveToLimit({ W, iu, arm, mode, side }) {
+  // mode: "add" | "remove"; side: "fwd" | "aft"
+  const limitFn = side === "fwd" ? fwdLimit : aftLimit;
+  const g = (w) => {
+    const sign = mode === "add" ? 1 : -1;
+    const W2 = W + sign * w;
+    const IU2 = iu + sign * iuFromWA(w, arm);
+    const CG2 = cgFromIU(IU2, W2);
+    return CG2 - limitFn(W2);
+  };
+  // find bracket where g crosses zero, w in [0, 900]
+  let lo = 0, hi = 900;
+  const g0 = g(0);
+  // we need g to change sign across the interval
+  if (g0 === 0) return { w: 0, W2: W, CG2: cgFromIU(iu, W) };
+  let found = false;
+  for (let hiTry = 5; hiTry <= 900; hiTry += 5) {
+    if (Math.sign(g(hiTry)) !== Math.sign(g0)) { hi = hiTry; lo = hiTry - 5; found = true; break; }
+  }
+  if (!found) return null;
+  for (let i = 0; i < 80; i++) {
+    const m = (lo + hi) / 2;
+    if (Math.sign(g(m)) === Math.sign(g(lo))) lo = m; else hi = m;
+  }
+  const w = (lo + hi) / 2;
+  const sign = mode === "add" ? 1 : -1;
+  const W2 = W + sign * w;
+  const IU2 = iu + sign * iuFromWA(w, arm);
+  return { w, W2, CG2: cgFromIU(IU2, W2), IU2 };
+}
+
+/* ── SOLVER ─────────────────────────────────────────────────────────────── */
+function solve({ weight, iu, fixType, station, side }) {
+  const steps = [];
+  const w0 = Number(weight), iu0 = Number(iu);
+  if (!w0 || !iu0) return { steps: [], summary: null, error: "Enter both weight and moment index." };
+
+  const cg0 = cgFromIU(iu0, w0);
+  const fwd = fwdLimit(w0), aft = aftLimit();
+  const withinFwd = cg0 >= fwd, withinAft = cg0 <= aft;
+
+  steps.push({
+    title: "1. Current CG",
+    formula: "CG = IU × 10000 ÷ Weight",
+    work: `CG = ${fmt(iu0)} × 10000 ÷ ${fmt(w0)} = ${fmt(cg0, 2)} mm`,
+  });
+  steps.push({
+    title: "2. Check CG limits",
+    formula: `FWD @ ${fmt(w0)} kg = ${w0 > 2360 ? "(W−2360)×0.27+2400" : "2400 (flat)"} · AFT = 2680`,
+    work:
+      `FWD limit = ${fmt(fwd, 1)} mm → CG ${withinFwd ? "OK ✓" : "TOO FAR FWD by " + fmt(fwd - cg0, 1) + " mm"}\n` +
+      `AFT limit = 2680 mm → CG ${withinAft ? "OK ✓" : "TOO FAR AFT by " + fmt(cg0 - aft, 1) + " mm"}`,
+  });
+  steps.push({
+    title: "3. Weight ceilings",
+    formula: "MTOW 2950 · MLW 2725 · MZFW 2630",
+    work: `Weight ${fmt(w0)} kg → MTOW margin ${fmt(2950 - w0)} kg ${w0 > 2950 ? "❌" : "✓"}`,
+  });
+
+  const summary = { cg0, fwd, aft, withinFwd, withinAft, w0, iu0 };
+
+  if (fixType === "none") {
+    summary.verdict = withinFwd && withinAft ? "In limits — no ballast needed." : "Out of limits — choose a fix.";
+    return { steps, summary };
+  }
+
+  const arm = ECHO.arms[station];
+  const armName = STATION_LABEL[station];
+
+  // Which limit are we working to? auto unless overridden
+  let targetSide = side;
+  if (!targetSide || targetSide === "auto") {
+    if (!withinAft) targetSide = "aft";
+    else if (!withinFwd) targetSide = "fwd";
+    else { summary.verdict = "Already in limits — no ballast required."; return { steps, summary }; }
+  }
+  summary.targetSide = targetSide;
+
+  if (fixType === "add" || fixType === "remove") {
+    if (targetSide === "aft") {
+      // fixed target → closed-form (matches graphical, but no slope)
+      const target = aft;
+      const w = (w0 * Math.abs(cg0 - target)) / Math.abs(target - arm);
+      const wCeil = Math.ceil(w * 10) / 10;
+      const sign = fixType === "add" ? 1 : -1;
+      const newW = w0 + sign * w;
+      const newIU = iu0 + sign * iuFromWA(w, arm);
+      const newCG = cgFromIU(newIU, newW);
+      steps.push({
+        title: `4. ${fixType === "add" ? "Add" : "Remove"} at ${armName} (arm ${arm}) — AFT limit (fixed 2680)`,
+        formula: "w = W × |CG − 2680| ÷ |2680 − arm|",
+        work: `w = ${fmt(w0)} × ${fmt(Math.abs(cg0 - target), 1)} ÷ ${fmt(Math.abs(target - arm), 1)} = ${fmt(w, 2)} kg`
+          + (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : ""),
+      });
+      steps.push({
+        title: "5. Verify",
+        formula: "CG = new IU × 10000 ÷ new W",
+        work: `new W ${fmt(newW, 1)} kg · CG ${fmt(newCG, 1)} mm ✓ on 2680`,
+      });
+      summary.verdict = `${fixType === "add" ? "Add" : "Remove"} ${fmt(fixType === "add" ? wCeil : w, 1)} kg at ${armName} → CG on aft limit.`;
+      summary.answer = fixType === "add" ? wCeil : w;
+      summary.plot = { before: { w: w0, cg: cg0 }, after: { w: newW, cg: newCG }, arm };
+    } else {
+      // FORWARD limit — moving target → solve simultaneously (graphical intersection)
+      const res = solveToLimit({ W: w0, iu: iu0, arm, mode: fixType, side: "fwd" });
+      if (!res) {
+        steps.push({
+          title: "4. Forward limit (sloping) — no solution in range",
+          formula: "solve CG(W₂) = (W₂−2360)×0.27+2400 simultaneously",
+          work: `No add/remove ≤ 900 kg at ${armName} brings the point onto the forward boundary. Check the station choice (arm ${arm}) — it may push the CG the wrong way.`,
+        });
+        summary.verdict = "No valid forward-limit solution at this station.";
+        return { steps, summary };
+      }
+      const wCeil = Math.ceil(res.w * 10) / 10;
+      steps.push({
+        title: `4. ${fixType === "add" ? "Add" : "Remove"} at ${armName} (arm ${arm}) — FORWARD limit (SLOPING)`,
+        formula: "the fwd limit MOVES with weight, so solve CG(W₂) = (W₂−2360)×0.27+2400 together",
+        work:
+          `A fixed-limit formula would be wrong here (§6.6). Solving the moving-limit\n` +
+          `intersection (the graphical Fig-11 point, done exactly):\n` +
+          `${fixType === "add" ? "add" : "remove"} = ${fmt(res.w, 2)} kg` +
+          (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : ""),
+      });
+      steps.push({
+        title: "5. Verify on the sloping boundary",
+        formula: "CG₂ must equal fwdLimit(W₂)",
+        work:
+          `new W = ${fmt(res.W2, 1)} kg\n` +
+          `CG₂ = ${fmt(res.CG2, 1)} mm\n` +
+          `fwd limit @ ${fmt(res.W2, 1)} kg = ${fmt(fwdLimit(res.W2), 1)} mm ✓ (on the line)`,
+      });
+      const cap = ECHO.maxLoad[station];
+      steps.push({
+        title: "6. Sanity checks",
+        formula: "compartment max · MTOW 2950",
+        work: `${cap ? `Station max ${cap} kg → ${res.w <= cap ? "OK" : "❌ exceeds"}. ` : ""}new W ${fmt(res.W2, 1)} vs MTOW 2950 → ${res.W2 <= 2950 ? "OK ✓" : "❌"}`,
+      });
+      summary.verdict = `${fixType === "add" ? "Add" : "Remove"} ${fmt(fixType === "add" ? wCeil : res.w, 1)} kg at ${armName} → CG on the sloping forward limit (${fmt(res.CG2, 0)} mm @ ${fmt(res.W2, 0)} kg).`;
+      summary.answer = fixType === "add" ? wCeil : res.w;
+      summary.plot = { before: { w: w0, cg: cg0 }, after: { w: res.W2, cg: res.CG2 }, arm };
+    }
+  }
+
+  if (fixType === "maxfuel") {
+    const target = aft;
+    const w = (target - cg0) * w0 / (arm - target);
+    const usg = w / ECHO.KG_PER_USG;
+    steps.push({
+      title: `4. Max fuel into ${armName} (arm ${arm}) before aft CG limit`,
+      formula: "w = (2680 − CG) × W ÷ (arm − 2680)",
+      work: `w = (2680 − ${fmt(cg0, 1)}) × ${fmt(w0)} ÷ (${arm} − 2680) = ${fmt(w, 2)} kg = ${fmt(usg, 1)} USG`,
+    });
+    steps.push({
+      title: "5. Which limit binds?",
+      formula: "compare CG-limited fuel vs weight margin",
+      work: `CG-limited ${fmt(w, 1)} kg · weight margin to MTOW ${fmt(2950 - w0, 1)} kg → smaller binds`,
+    });
+    summary.verdict = `Greatest fuel ≈ ${fmt(w, 1)} kg (${fmt(usg, 1)} USG) before aft CG limit.`;
+    summary.answer = w;
+    summary.plot = { before: { w: w0, cg: cg0 }, after: { w: w0 + w, cg: target }, arm };
+  }
+
+  return { steps, summary };
+}
+
+/* ── CG ENVELOPE GRAPH (SVG) ────────────────────────────────────────────── */
+function EnvelopeGraph({ plot, cg0, w0 }) {
+  // axes: x = CG (2350–2720 mm), y = Weight (1900–2960 kg), weight increasing UP
+  const X0 = 2350, X1 = 2720, Y0 = ECHO.MIN_W, Y1 = 2960;
+  const W = 520, H = 380, padL = 54, padB = 40, padT = 16, padR = 14;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const sx = (cg) => padL + ((cg - X0) / (X1 - X0)) * plotW;
+  const sy = (w) => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
+
+  // envelope outline (clockwise): fwd corner low → up the sloping fwd limit → top → aft down
+  const fwdPts = [];
+  for (let w = Y0; w <= 2950; w += 10) fwdPts.push([sx(fwdLimit(w)), sy(w)]);
+  const aftX = sx(ECHO.AFT_LIMIT);
+  const envPath =
+    `M ${fwdPts[0][0]} ${fwdPts[0][1]} ` +
+    fwdPts.slice(1).map((p) => `L ${p[0]} ${p[1]}`).join(" ") +
+    ` L ${aftX} ${sy(2950)} L ${aftX} ${sy(Y0)} Z`;
+
+  const gridW = [2000, 2200, 2400, 2600, 2725, 2800, 2950];
+  const gridCG = [2400, 2500, 2600, 2680];
+
+  const before = plot?.before, after = plot?.after;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="eh-svg" role="img" aria-label="Echo CG envelope">
+      {/* plot bg */}
+      <rect x={padL} y={padT} width={plotW} height={plotH} fill="rgba(255,255,255,0.02)" stroke="var(--line)" />
+      {/* grid weight lines */}
+      {gridW.map((w) => (
+        <g key={"w" + w}>
+          <line x1={padL} y1={sy(w)} x2={W - padR} y2={sy(w)} stroke="var(--line)" strokeDasharray="2 4" opacity="0.5" />
+          <text x={padL - 6} y={sy(w) + 3} textAnchor="end" className="eh-axis">{w}</text>
+        </g>
+      ))}
+      {gridCG.map((cg) => (
+        <g key={"c" + cg}>
+          <line x1={sx(cg)} y1={padT} x2={sx(cg)} y2={H - padB} stroke="var(--line)" strokeDasharray="2 4" opacity="0.4" />
+          <text x={sx(cg)} y={H - padB + 14} textAnchor="middle" className="eh-axis">{cg}</text>
+        </g>
+      ))}
+      {/* envelope */}
+      <path d={envPath} fill="rgba(218,83,44,0.10)" stroke="var(--amber)" strokeWidth="2" />
+      {/* MTOW / MLW markers */}
+      <line x1={padL} y1={sy(2950)} x2={W - padR} y2={sy(2950)} stroke="var(--amber2)" strokeWidth="1" opacity="0.7" />
+      <text x={W - padR - 2} y={sy(2950) - 4} textAnchor="end" className="eh-axis" fill="var(--amber2)">MTOW 2950</text>
+      <line x1={padL} y1={sy(2725)} x2={W - padR} y2={sy(2725)} stroke="var(--good)" strokeDasharray="4 3" strokeWidth="1" opacity="0.7" />
+      <text x={W - padR - 2} y={sy(2725) - 4} textAnchor="end" className="eh-axis" fill="var(--good)">MLW 2725</text>
+
+      {/* before/after points + arrow */}
+      {before && after && (
+        <line x1={sx(before.cg)} y1={sy(before.w)} x2={sx(after.cg)} y2={sy(after.w)}
+          stroke="var(--ink)" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow)" />
+      )}
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--ink)" />
+        </marker>
+      </defs>
+      {before && (
+        <g>
+          <circle cx={sx(before.cg)} cy={sy(before.w)} r="5"
+            fill={(before.cg >= fwdLimit(before.w) && before.cg <= ECHO.AFT_LIMIT) ? "var(--good)" : "var(--bad)"}
+            stroke="#fff" strokeWidth="1.5" />
+          <text x={sx(before.cg) + 8} y={sy(before.w) - 6} className="eh-pt">before</text>
+        </g>
+      )}
+      {after && (
+        <g>
+          <circle cx={sx(after.cg)} cy={sy(after.w)} r="5" fill="var(--amber)" stroke="#fff" strokeWidth="1.5" />
+          <text x={sx(after.cg) + 8} y={sy(after.w) + 14} className="eh-pt">after</text>
+        </g>
+      )}
+      {!plot && cg0 && w0 && (
+        <circle cx={sx(cg0)} cy={sy(w0)} r="5"
+          fill={(cg0 >= fwdLimit(w0) && cg0 <= ECHO.AFT_LIMIT) ? "var(--good)" : "var(--bad)"}
+          stroke="#fff" strokeWidth="1.5" />
+      )}
+
+      <text x={padL} y={12} className="eh-axis">CG envelope · weight (kg) vs CG (mm)</text>
+    </svg>
+  );
+}
+
+/* ── UI ─────────────────────────────────────────────────────────────────── */
+export default function EchoLoadingHelper() {
+  const [tab, setTab] = useState("solve");
+  const [weight, setWeight] = useState("");
+  const [iu, setIU] = useState("");
+  const [fixType, setFixType] = useState("add");
+  const [station, setStation] = useState("fwd");
+  const [side, setSide] = useState("auto");
+  const [q, setQ] = useState(null);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [variant, setVariant] = useState("all");
+
+  const result = useMemo(
+    () => solve({ weight, iu, fixType, station, side }),
+    [weight, iu, fixType, station, side]
+  );
+
+  function newQuestion(useVariant = variant) { setQ(generateQuestion(useVariant)); setShowAnswer(false); }
+  function loadQuestionIntoSolver() {
+    if (!q?.preset) return;
+    setWeight(String(q.preset.weight));
+    setIU(String(q.preset.iu));
+    setFixType(q.preset.fixType);
+    setStation(q.preset.station);
+    setSide(q.preset.side || "auto");
+    setTab("solve");
+  }
+  const qResult = q ? solve(q.preset) : null;
+
+  const showGraph = result.summary && !result.error;
+
+  return (
+    <div className="eh-root">
+      <style>{CSS}</style>
+
+      <header className="eh-head">
+        <div className="eh-badge">
+          <span className="eh-badge-ltf">LTF</span>
+          <span className="eh-badge-echo">ECHO</span>
+        </div>
+        <div>
+          <h1>Echo Loading Helper</h1>
+          <p className="eh-sub">Learn To Fly Melbourne · YMMB Moorabbin · Weight &amp; Balance · Loading System Echo</p>
+        </div>
+        <div className="eh-tail">VH-ECHO</div>
+      </header>
+
+      <nav className="eh-tabs">
+        <button className={tab === "solve" ? "on" : ""} onClick={() => setTab("solve")}>Solver</button>
+        <button className={tab === "practice" ? "on" : ""} onClick={() => setTab("practice")}>Practice</button>
+        <button className={tab === "ref" ? "on" : ""} onClick={() => setTab("ref")}>Echo data</button>
+      </nav>
+
+      {tab === "solve" && (
+        <section className="eh-panel">
+          <div className="eh-inputs">
+            <label><span>Weight (kg)</span>
+              <input type="number" inputMode="decimal" value={weight}
+                onChange={(e) => setWeight(e.target.value)} placeholder="2540" /></label>
+            <label><span>Moment index (IU)</span>
+              <input type="number" inputMode="decimal" value={iu}
+                onChange={(e) => setIU(e.target.value)} placeholder="680" /></label>
+            <label><span>What to do</span>
+              <select value={fixType} onChange={(e) => setFixType(e.target.value)}>
+                <option value="none">Just check limits</option>
+                <option value="add">Add ballast / load</option>
+                <option value="remove">Remove load</option>
+                <option value="maxfuel">Max fuel into a tank</option>
+              </select></label>
+            <label><span>Station</span>
+              <select value={station} onChange={(e) => setStation(e.target.value)}>
+                {Object.keys(STATION_LABEL).map((k) => (
+                  <option key={k} value={k}>{STATION_LABEL[k]} (arm {ECHO.arms[k]})</option>
+                ))}
+              </select></label>
+            <label><span>Work to which limit</span>
+              <select value={side} onChange={(e) => setSide(e.target.value)}>
+                <option value="auto">Auto (whichever is exceeded)</option>
+                <option value="fwd">Forward limit (sloping — graphical)</option>
+                <option value="aft">Aft limit (2680, fixed)</option>
+              </select></label>
+          </div>
+
+          {result.error && <div className="eh-note">{result.error}</div>}
+
+          {showGraph && (
+            <div className="eh-graphwrap">
+              <EnvelopeGraph plot={result.summary.plot} cg0={result.summary.cg0} w0={result.summary.w0} />
+            </div>
+          )}
+
+          <div className="eh-steps">
+            {result.steps.map((s, i) => (
+              <div className="eh-step" key={i}>
+                <div className="eh-step-title">{s.title}</div>
+                <div className="eh-formula">{s.formula}</div>
+                <pre className="eh-work">{s.work}</pre>
+              </div>
+            ))}
+          </div>
+
+          {result.summary?.verdict && (
+            <div className="eh-verdict"><span className="eh-verdict-tag">RESULT</span>{result.summary.verdict}</div>
+          )}
+        </section>
+      )}
+
+      {tab === "practice" && (
+        <section className="eh-panel">
+          <div className="eh-varbar">
+            <span className="eh-varlabel">Practise:</span>
+            <button className={variant === "all" ? "chip on" : "chip"}
+              onClick={() => { setVariant("all"); newQuestion("all"); }}>All variants</button>
+            {VARIANT_ORDER.map((k) => (
+              <button key={k} className={variant === k ? "chip on" : "chip"}
+                onClick={() => { setVariant(k); newQuestion(k); }}>{VARIANTS[k].label}</button>
+            ))}
+          </div>
+
+          {!q && (
+            <div className="eh-empty">
+              <p>Pick a variant above to drill it, or choose “All variants” for a random mix — including forward-limit problems that need the sloping envelope. Each comes with a full worked solution.</p>
+              <button className="eh-primary" onClick={() => newQuestion("all")}>Generate a question</button>
+            </div>
+          )}
+          {q && (
+            <>
+              <div className="eh-question">
+                <div className="eh-qhead">
+                  <span className="eh-qtag">QUESTION</span>
+                  <span className="eh-qtype">{q.type}</span>
+                </div>
+                <p>{q.prompt}</p>
+              </div>
+              <div className="eh-actions">
+                <button className="eh-primary" onClick={() => setShowAnswer((v) => !v)}>
+                  {showAnswer ? "Hide worked answer" : "Show worked answer"}
+                </button>
+                <button className="eh-ghost" onClick={loadQuestionIntoSolver}>Open in solver</button>
+                <button className="eh-ghost" onClick={() => newQuestion()}>New question</button>
+              </div>
+              {showAnswer && qResult && (
+                <>
+                  {qResult.summary?.plot && (
+                    <div className="eh-graphwrap">
+                      <EnvelopeGraph plot={qResult.summary.plot} cg0={qResult.summary.cg0} w0={qResult.summary.w0} />
+                    </div>
+                  )}
+                  <div className="eh-steps">
+                    {qResult.steps.map((s, i) => (
+                      <div className="eh-step" key={i}>
+                        <div className="eh-step-title">{s.title}</div>
+                        <div className="eh-formula">{s.formula}</div>
+                        <pre className="eh-work">{s.work}</pre>
+                      </div>
+                    ))}
+                    {qResult.summary?.verdict && (
+                      <div className="eh-verdict"><span className="eh-verdict-tag">ANSWER</span>{qResult.summary.verdict}</div>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === "ref" && (
+        <section className="eh-panel eh-ref">
+          <div className="eh-refgrid">
+            <RefCard title="Weight limits">
+              <Row k="MTOW" v="2950 kg" /><Row k="MLW" v="2725 kg" /><Row k="MZFW" v="2630 kg" />
+            </RefCard>
+            <RefCard title="CG limits">
+              <Row k="AFT (all wts)" v="2680 mm" />
+              <Row k="FWD ≤2360 kg" v="2400 mm" />
+              <Row k="FWD @2950 kg" v="2560 mm" />
+              <Row k="FWD slope" v="0.27 mm/kg" />
+            </RefCard>
+            <RefCard title="Formulas">
+              <Row k="CG" v="IU×10000 ÷ W" />
+              <Row k="IU" v="W×arm ÷ 10000" />
+              <Row k="MAC%" v="(CG−2190)/1900×100" />
+              <Row k="Aft ballast" v="W×|CG−2680| ÷ |2680−arm|" />
+              <Row k="Fwd ballast" v="solve on sloping line" />
+            </RefCard>
+            <RefCard title="Stations (arm / max)">
+              {Object.keys(STATION_LABEL).map((k) => (
+                <Row key={k} k={STATION_LABEL[k]} v={`${ECHO.arms[k]}${ECHO.maxLoad[k] ? " / " + ECHO.maxLoad[k] + "kg" : ""}`} />
+              ))}
+            </RefCard>
+            <RefCard title="Conversions">
+              <Row k="AVGAS" v="2.72 kg/USG" /><Row k="1 USG" v="3.785 L" />
+              <Row k="Std person" v="77 kg" /><Row k="Seat" v="5 kg each" />
+            </RefCard>
+            <RefCard title="Direction rules">
+              <Row k="Add weight" v="CG → toward its arm" />
+              <Row k="Burn mains (1780)" v="CG moves AFT" />
+              <Row k="Burn aux (2800)" v="CG moves FWD" />
+            </RefCard>
+          </div>
+          <div className="eh-slopenote">
+            <strong>Forward vs aft — why the graph matters.</strong> The aft limit is 2680 mm at every weight, so
+            add / remove / shift to the aft limit is always formula-valid. The forward limit <em>slopes</em> (2400 mm
+            up to 2360 kg, then rearward at 0.27 mm/kg to 2560 mm at 2950 kg), so when you add or remove weight the
+            target limit moves as you go. This app solves that intersection exactly — the same point you'd read off
+            Fig 11 graphically — and plots it on the envelope above.
+          </div>
+          <p className="eh-disclaimer">
+            Student study aid for CPL Flight Planning, built from CASA RPL/PPL/CPL Workbook v3.0a data. Not an official
+            Learn To Fly Melbourne document and not for operational use — always cross-check against the current
+            workbook, the Part 91/135 MOS, and your instructor.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function RefCard({ title, children }) {
+  return <div className="eh-card"><h3>{title}</h3>{children}</div>;
+}
+function Row({ k, v }) {
+  return <div className="eh-row"><span className="eh-k">{k}</span><span className="eh-v">{v}</span></div>;
+}
+
+/* ── QUESTION GENERATOR (Echo W&B only) ─────────────────────────────────── */
+const rand = (lo, hi, stp = 1) => Math.round((lo + Math.random() * (hi - lo)) / stp) * stp;
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// Each generator keyed so the Practice tab can offer them individually.
+const VARIANTS = {
+  addAft: {
+    label: "Add ballast — aft limit",
+    gen() {
+      const w = rand(2500, 2600, 10), cg = rand(2690, 2725);
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Add ballast — aft limit",
+        prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU (CG too far aft). Minimum ballast to add to the forward compartment (arm 500) to reach the aft limit?`,
+        preset: { weight: w, iu, fixType: "add", station: "fwd", side: "aft" } };
+    },
+  },
+  removeAft: {
+    label: "Remove load — aft limit",
+    gen() {
+      const w = rand(2500, 2600, 10), cg = rand(2695, 2735);
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Remove load — aft limit",
+        prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU. Load sits in the rear compartment (arm 5000). How much to remove to reach the aft limit?`,
+        preset: { weight: w, iu, fixType: "remove", station: "rear", side: "aft" } };
+    },
+  },
+  fwdAdd: {
+    label: "Forward limit — add load (graphical)",
+    gen() {
+      const w = rand(2450, 2560, 10);
+      const cg = fwdLimit(w) - rand(8, 25); // genuinely forward of the sloping limit
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Forward limit — add load (graphical)",
+        prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU, with the CG too far forward. How much must be added to the rear compartment (arm 5000) to bring the CG onto the (sloping) forward limit? Note the forward limit moves with weight.`,
+        preset: { weight: w, iu, fixType: "add", station: "rear", side: "fwd" } };
+    },
+  },
+  fwdRemove: {
+    label: "Forward limit — remove load (graphical)",
+    gen() {
+      // Start genuinely (but modestly) forward of the SLOPING limit at this weight,
+      // so the required removal is real and loadable.
+      const w = rand(2450, 2560, 10);
+      const cg = fwdLimit(w) - rand(8, 22); // 8–22 mm forward of the limit
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Forward limit — remove load (graphical)",
+        prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU, CG forward of limits. Row-1 load is at arm 2290. How much must be removed from row 1 to bring the CG onto the sloping forward limit?`,
+        preset: { weight: w, iu, fixType: "remove", station: "row1", side: "fwd" } };
+    },
+  },
+  maxAuxFuel: {
+    label: "Max aux fuel (CG-limited)",
+    gen() {
+      const w = rand(2450, 2620, 10), cg = rand(2670, 2679);
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Max aux fuel (CG-limited)",
+        prompt: `An Echo has the main tanks full, aux tanks empty. Gross weight ${w} kg, moment ${iu} IU. Greatest fuel that may be loaded into the aux tanks (arm 2800)?`,
+        preset: { weight: w, iu, fixType: "maxfuel", station: "auxTank", side: "aft" } };
+    },
+  },
+  inLimits: {
+    label: "Limit check (in / out)",
+    gen() {
+      const w = rand(2400, 2600, 10), cg = rand(2440, 2700);
+      const iu = Math.round((cg * w) / 10000);
+      return { type: "Limit check",
+        prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU. Is the CG within limits?`,
+        preset: { weight: w, iu, fixType: "none", station: "fwd", side: "auto" } };
+    },
+  },
+};
+
+const VARIANT_ORDER = ["addAft", "removeAft", "fwdAdd", "fwdRemove", "maxAuxFuel", "inLimits"];
+
+function generateQuestion(key = "all") {
+  const chosen = key === "all" ? pick(VARIANT_ORDER) : key;
+  return (VARIANTS[chosen] || VARIANTS.addAft).gen();
+}
+
+const CSS = `
+.eh-root{
+  --bg:#0a1526; --panel:#0f1d33; --panel2:#152741; --line:#243c5c;
+  --ink:#eaf1fa; --dim:#8ba6c8; --amber:#da532c; --amber2:#f47a52;
+  --navy:#0d2748; --good:#4fb783; --bad:#e5675f;
+  --mono:'SF Mono',ui-monospace,'Roboto Mono',Menlo,Consolas,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  max-width:860px;margin:0 auto;padding:20px 16px 60px;
+  background:radial-gradient(1200px 500px at 80% -10%,rgba(218,83,44,.08),transparent 60%),var(--bg);
+  color:var(--ink);font-family:var(--sans);min-height:100vh;line-height:1.5;
+}
+*{box-sizing:border-box}
+.eh-head{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.eh-badge{display:flex;flex-direction:column;border-radius:7px;overflow:hidden;
+  box-shadow:0 4px 16px rgba(0,0,0,.35),0 0 0 1px rgba(218,83,44,.35);
+  font-family:var(--mono);font-weight:800;letter-spacing:.12em;font-size:12px;text-align:center}
+.eh-badge-ltf{background:var(--amber);color:#fff;padding:5px 10px}
+.eh-badge-echo{background:var(--navy);color:var(--ink);padding:5px 10px}
+.eh-head h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.eh-sub{margin:3px 0 0;color:var(--dim);font-size:12px;font-family:var(--mono);line-height:1.4}
+.eh-tail{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.18em;
+  color:var(--amber2);border:1px solid var(--line);padding:6px 10px;border-radius:6px;align-self:flex-start}
+@media (max-width:560px){.eh-tail{display:none}}
+.eh-tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.eh-tabs button{background:none;border:none;color:var(--dim);font-family:var(--mono);
+  font-size:13px;letter-spacing:.03em;padding:9px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+.eh-tabs button:hover{color:var(--ink)}
+.eh-tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
+.eh-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+.eh-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.eh-inputs label{display:flex;flex-direction:column;gap:6px}
+.eh-inputs label:last-child{grid-column:1 / -1}
+.eh-inputs span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-family:var(--mono)}
+.eh-inputs input,.eh-inputs select{background:var(--bg);border:1px solid var(--line);color:var(--ink);
+  border-radius:8px;padding:11px 12px;font-family:var(--mono);font-size:15px;outline:none;transition:.15s}
+.eh-inputs input:focus,.eh-inputs select:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(218,83,44,.12)}
+.eh-graphwrap{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:16px}
+.eh-svg{width:100%;height:auto;display:block}
+.eh-axis{font-family:var(--mono);font-size:9px;fill:var(--dim)}
+.eh-pt{font-family:var(--mono);font-size:10px;fill:var(--ink);font-weight:600}
+.eh-steps{display:flex;flex-direction:column;gap:10px}
+.eh-step{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:8px;padding:12px 14px}
+.eh-step-title{font-weight:600;font-size:14px;margin-bottom:6px}
+.eh-formula{font-family:var(--mono);font-size:12px;color:var(--amber2);background:rgba(218,83,44,.07);padding:6px 8px;border-radius:5px;margin-bottom:8px}
+.eh-work{font-family:var(--mono);font-size:13px;color:var(--ink);margin:0;white-space:pre-wrap;line-height:1.7}
+.eh-verdict{margin-top:16px;background:linear-gradient(180deg,rgba(218,83,44,.14),rgba(218,83,44,.05));border:1px solid rgba(218,83,44,.45);border-radius:9px;padding:14px 16px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:12px}
+.eh-verdict-tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;background:var(--amber);color:#fff;padding:4px 8px;border-radius:4px;font-weight:700;display:inline-block}
+.eh-note{background:rgba(229,103,95,.1);border:1px solid rgba(229,103,95,.3);color:#ffb4ae;padding:10px 12px;border-radius:8px;font-family:var(--mono);font-size:13px;margin-bottom:14px}
+.eh-empty{text-align:center;padding:20px 10px}
+.eh-empty p{color:var(--dim);margin:0 0 16px}
+.eh-primary{background:var(--amber);color:#fff;border:none;font-weight:650;font-family:var(--sans);font-size:14px;padding:11px 18px;border-radius:8px;cursor:pointer;transition:.15s}
+.eh-primary:hover{background:var(--amber2)}
+.eh-ghost{background:none;color:var(--ink);border:1px solid var(--line);font-family:var(--sans);font-size:14px;padding:11px 16px;border-radius:8px;cursor:pointer;transition:.15s}
+.eh-ghost:hover{border-color:var(--amber);color:var(--amber)}
+.eh-question{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:16px;margin-bottom:16px}
+.eh-qhead{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.eh-qtag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#fff;background:var(--amber);padding:3px 8px;border-radius:4px;font-weight:700;display:inline-block}
+.eh-qtype{font-family:var(--mono);font-size:11px;color:var(--amber2)}
+.eh-question p{margin:0;font-size:15px;line-height:1.55}
+.eh-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.eh-varbar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.eh-varlabel{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-right:2px}
+.chip{background:var(--bg);border:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11.5px;padding:7px 11px;border-radius:20px;cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--amber);color:var(--ink)}
+.chip.on{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:700}
+.eh-ref h3{font-size:13px;font-family:var(--mono);letter-spacing:.05em;color:var(--amber);margin:0 0 10px}
+.eh-refgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.eh-card{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:14px}
+.eh-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed rgba(139,166,200,.18);font-size:13px}
+.eh-row:last-child{border-bottom:none}
+.eh-k{color:var(--dim)}
+.eh-v{font-family:var(--mono);color:var(--ink);text-align:right}
+.eh-slopenote{margin-top:14px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:8px;padding:13px 15px;font-size:13.5px;line-height:1.6;color:var(--ink)}
+.eh-slopenote strong{color:var(--amber2)}
+.eh-disclaimer{margin-top:16px;color:var(--dim);font-size:11.5px;line-height:1.5;font-family:var(--mono)}
+@media (max-width:560px){.eh-inputs{grid-template-columns:1fr}.eh-refgrid{grid-template-columns:1fr}.eh-head h1{font-size:19px}}
+`;
