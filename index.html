@@ -7,15 +7,15 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
-  <style>
-    /* Add your CSS here if needed */
-  </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useMemo } = React;
+
+    // === COPY FROM HERE DOWN TO THE END OF YOUR ORIGINAL FILE ===
+    // (All your const ECHO, functions, and the EchoLoadingHelper component)
 
 const ECHO = {
   MTOW: 2950, MLW: 2725, MZFW: 2630,
@@ -685,15 +685,3 @@ const CSS = `
 .eh-disclaimer{margin-top:16px;color:var(--dim);font-size:11.5px;line-height:1.5;font-family:var(--mono)}
 @media (max-width:560px){.eh-inputs{grid-template-columns:1fr}.eh-refgrid{grid-template-columns:1fr}.eh-head h1{font-size:19px}}
 `;
-    function EchoLoadingHelper() {
-      return React.createElement('div', {style:{padding:'40px', textAlign:'center'}},
-        React.createElement('h1', null, 'Echo Loading Helper'),
-        React.createElement('p', null, 'Full tool loading...')
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(EchoLoadingHelper));
-  </script>
-</body>
-</html>
