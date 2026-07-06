@@ -4,11 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Echo Loading Helper · Learn To Fly Melbourne</title>
-<link rel="preconnect" href="https://unpkg.com" />
 <style>
   html,body{margin:0;padding:0;background:#0a1526;}
   #root{min-height:100vh;}
-  /* tiny loading state before React mounts */
   #boot{color:#8ba6c8;font-family:ui-monospace,Menlo,Consolas,monospace;
         text-align:center;padding:60px 20px;font-size:13px;}
 </style>
@@ -16,14 +14,14 @@
 <body>
 <div id="root"><div id="boot">Loading Echo Loading Helper…</div></div>
 
-<!-- React + ReactDOM + Babel (in-browser JSX compile) -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-<script type="text/babel" data-presets="react">
-const { useState, useMemo } = React;
-
+<script>
+try {
+const {
+  useState,
+  useMemo
+} = React;
 
 /* ──────────────────────────────────────────────────────────────────────────
    ECHO LOADING HELPER  ·  Learn To Fly Melbourne
@@ -32,23 +30,40 @@ const { useState, useMemo } = React;
    ────────────────────────────────────────────────────────────────────────── */
 
 const ECHO = {
-  MTOW: 2950, MLW: 2725, MZFW: 2630,
-  AFT_LIMIT: 2680,           // mm, constant all weights
-  MAC_LEN: 1900, MAC_LE: 2190,
+  MTOW: 2950,
+  MLW: 2725,
+  MZFW: 2630,
+  AFT_LIMIT: 2680,
+  // mm, constant all weights
+  MAC_LEN: 1900,
+  MAC_LE: 2190,
   KG_PER_USG: 2.72,
-  MIN_W: 1900,               // envelope floor for drawing
+  MIN_W: 1900,
+  // envelope floor for drawing
   arms: {
-    fwd: 500, row1: 2290, row2: 3300, row3: 4300,
-    mainTank: 1780, auxTank: 2800, leftWing: 3550, rightWing: 3550, rear: 5000,
+    fwd: 500,
+    row1: 2290,
+    row2: 3300,
+    row3: 4300,
+    mainTank: 1780,
+    auxTank: 2800,
+    leftWing: 3550,
+    rightWing: 3550,
+    rear: 5000
   },
-  maxLoad: { fwd: 55, leftWing: 55, rightWing: 55, rear: 155 },
+  maxLoad: {
+    fwd: 55,
+    leftWing: 55,
+    rightWing: 55,
+    rear: 155
+  }
 };
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
   tag: "v0.6",
   date: "2026-07-07",
-  note: "IU chart: project before/after points to weight axis with Δweight bracket",
+  note: "IU chart: project before/after points to weight axis with Δweight bracket"
 };
 // changelog:
 //  v0.6 — IU loading chart projects each point across to the weight axis + Δweight (add/remove) bracket
@@ -60,9 +75,15 @@ const APP_VERSION = {
 //  v0.0 — initial solver + practice + reference
 
 const STATION_LABEL = {
-  fwd: "forward compartment", row1: "row 1", row2: "row 2", row3: "row 3",
-  mainTank: "main tanks", auxTank: "aux tanks",
-  leftWing: "left wing locker", rightWing: "right wing locker", rear: "rear compartment",
+  fwd: "forward compartment",
+  row1: "row 1",
+  row2: "row 2",
+  row3: "row 3",
+  mainTank: "main tanks",
+  auxTank: "aux tanks",
+  leftWing: "left wing locker",
+  rightWing: "right wing locker",
+  rear: "rear compartment"
 };
 
 // Forward limit: 2400 up to 2360 kg; slopes rearward 0.27 mm/kg to 2560 @ 2950 kg
@@ -72,21 +93,25 @@ function fwdLimit(w) {
   return (w - 2360) * 0.27 + 2400;
 }
 const aftLimit = () => ECHO.AFT_LIMIT;
-
-const fmt = (n, d = 1) =>
-  n === null || n === undefined || Number.isNaN(n)
-    ? "—"
-    : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
-
-const cgFromIU = (iu, w) => (iu * 10000) / w;
-const iuFromWA = (w, a) => (w * a) / 10000;
+const fmt = (n, d = 1) => n === null || n === undefined || Number.isNaN(n) ? "—" : Number(n).toLocaleString(undefined, {
+  minimumFractionDigits: d,
+  maximumFractionDigits: d
+});
+const cgFromIU = (iu, w) => iu * 10000 / w;
+const iuFromWA = (w, a) => w * a / 10000;
 
 // Bisection: solve for the weight (add/remove) at arm `a` that lands the
 // post-load point exactly on a moving limit (fwd) or fixed limit (aft).
-function solveToLimit({ W, iu, arm, mode, side }) {
+function solveToLimit({
+  W,
+  iu,
+  arm,
+  mode,
+  side
+}) {
   // mode: "add" | "remove"; side: "fwd" | "aft"
   const limitFn = side === "fwd" ? fwdLimit : aftLimit;
-  const g = (w) => {
+  const g = w => {
     const sign = mode === "add" ? 1 : -1;
     const W2 = W + sign * w;
     const IU2 = iu + sign * iuFromWA(w, arm);
@@ -94,78 +119,113 @@ function solveToLimit({ W, iu, arm, mode, side }) {
     return CG2 - limitFn(W2);
   };
   // find bracket where g crosses zero, w in [0, 900]
-  let lo = 0, hi = 900;
+  let lo = 0,
+    hi = 900;
   const g0 = g(0);
   // we need g to change sign across the interval
-  if (g0 === 0) return { w: 0, W2: W, CG2: cgFromIU(iu, W) };
+  if (g0 === 0) return {
+    w: 0,
+    W2: W,
+    CG2: cgFromIU(iu, W)
+  };
   let found = false;
   for (let hiTry = 5; hiTry <= 900; hiTry += 5) {
-    if (Math.sign(g(hiTry)) !== Math.sign(g0)) { hi = hiTry; lo = hiTry - 5; found = true; break; }
+    if (Math.sign(g(hiTry)) !== Math.sign(g0)) {
+      hi = hiTry;
+      lo = hiTry - 5;
+      found = true;
+      break;
+    }
   }
   if (!found) return null;
   for (let i = 0; i < 80; i++) {
     const m = (lo + hi) / 2;
-    if (Math.sign(g(m)) === Math.sign(g(lo))) lo = m; else hi = m;
+    if (Math.sign(g(m)) === Math.sign(g(lo))) lo = m;else hi = m;
   }
   const w = (lo + hi) / 2;
   const sign = mode === "add" ? 1 : -1;
   const W2 = W + sign * w;
   const IU2 = iu + sign * iuFromWA(w, arm);
-  return { w, W2, CG2: cgFromIU(IU2, W2), IU2 };
+  return {
+    w,
+    W2,
+    CG2: cgFromIU(IU2, W2),
+    IU2
+  };
 }
 
 /* ── SOLVER ─────────────────────────────────────────────────────────────── */
-function solve({ weight, iu, fixType, station, side }) {
+function solve({
+  weight,
+  iu,
+  fixType,
+  station,
+  side
+}) {
   const steps = [];
-  const w0 = Number(weight), iu0 = Number(iu);
-  if (!w0 || !iu0) return { steps: [], summary: null, error: "Enter both weight and moment index." };
-
+  const w0 = Number(weight),
+    iu0 = Number(iu);
+  if (!w0 || !iu0) return {
+    steps: [],
+    summary: null,
+    error: "Enter both weight and moment index."
+  };
   const cg0 = cgFromIU(iu0, w0);
-  const fwd = fwdLimit(w0), aft = aftLimit();
-  const withinFwd = cg0 >= fwd, withinAft = cg0 <= aft;
-
+  const fwd = fwdLimit(w0),
+    aft = aftLimit();
+  const withinFwd = cg0 >= fwd,
+    withinAft = cg0 <= aft;
   steps.push({
     title: "1. Current CG",
     formula: "CG = IU × 10000 ÷ Weight",
-    work: `CG = ${fmt(iu0)} × 10000 ÷ ${fmt(w0)} = ${fmt(cg0, 2)} mm`,
+    work: `CG = ${fmt(iu0)} × 10000 ÷ ${fmt(w0)} = ${fmt(cg0, 2)} mm`
   });
   steps.push({
     title: "2. Check CG limits",
     formula: `FWD @ ${fmt(w0)} kg = ${w0 > 2360 ? "(W−2360)×0.27+2400" : "2400 (flat)"} · AFT = 2680`,
-    work:
-      `FWD limit = ${fmt(fwd, 1)} mm → CG ${withinFwd ? "OK ✓" : "TOO FAR FWD by " + fmt(fwd - cg0, 1) + " mm"}\n` +
-      `AFT limit = 2680 mm → CG ${withinAft ? "OK ✓" : "TOO FAR AFT by " + fmt(cg0 - aft, 1) + " mm"}`,
+    work: `FWD limit = ${fmt(fwd, 1)} mm → CG ${withinFwd ? "OK ✓" : "TOO FAR FWD by " + fmt(fwd - cg0, 1) + " mm"}\n` + `AFT limit = 2680 mm → CG ${withinAft ? "OK ✓" : "TOO FAR AFT by " + fmt(cg0 - aft, 1) + " mm"}`
   });
   steps.push({
     title: "3. Weight ceilings",
     formula: "MTOW 2950 · MLW 2725 · MZFW 2630",
-    work: `Weight ${fmt(w0)} kg → MTOW margin ${fmt(2950 - w0)} kg ${w0 > 2950 ? "❌" : "✓"}`,
+    work: `Weight ${fmt(w0)} kg → MTOW margin ${fmt(2950 - w0)} kg ${w0 > 2950 ? "❌" : "✓"}`
   });
-
-  const summary = { cg0, fwd, aft, withinFwd, withinAft, w0, iu0 };
-
+  const summary = {
+    cg0,
+    fwd,
+    aft,
+    withinFwd,
+    withinAft,
+    w0,
+    iu0
+  };
   if (fixType === "none") {
     summary.verdict = withinFwd && withinAft ? "In limits — no ballast needed." : "Out of limits — choose a fix.";
-    return { steps, summary };
+    return {
+      steps,
+      summary
+    };
   }
-
   const arm = ECHO.arms[station];
   const armName = STATION_LABEL[station];
 
   // Which limit are we working to? auto unless overridden
   let targetSide = side;
   if (!targetSide || targetSide === "auto") {
-    if (!withinAft) targetSide = "aft";
-    else if (!withinFwd) targetSide = "fwd";
-    else { summary.verdict = "Already in limits — no ballast required."; return { steps, summary }; }
+    if (!withinAft) targetSide = "aft";else if (!withinFwd) targetSide = "fwd";else {
+      summary.verdict = "Already in limits — no ballast required.";
+      return {
+        steps,
+        summary
+      };
+    }
   }
   summary.targetSide = targetSide;
-
   if (fixType === "add" || fixType === "remove") {
     if (targetSide === "aft") {
       // fixed target → closed-form (matches graphical, but no slope)
       const target = aft;
-      const w = (w0 * Math.abs(cg0 - target)) / Math.abs(target - arm);
+      const w = w0 * Math.abs(cg0 - target) / Math.abs(target - arm);
       const wCeil = Math.ceil(w * 10) / 10;
       const sign = fixType === "add" ? 1 : -1;
       const newW = w0 + sign * w;
@@ -174,59 +234,79 @@ function solve({ weight, iu, fixType, station, side }) {
       steps.push({
         title: `4. ${fixType === "add" ? "Add" : "Remove"} at ${armName} (arm ${arm}) — AFT limit (fixed 2680)`,
         formula: "w = W × |CG − 2680| ÷ |2680 − arm|",
-        work: `w = ${fmt(w0)} × ${fmt(Math.abs(cg0 - target), 1)} ÷ ${fmt(Math.abs(target - arm), 1)} = ${fmt(w, 2)} kg`
-          + (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : ""),
+        work: `w = ${fmt(w0)} × ${fmt(Math.abs(cg0 - target), 1)} ÷ ${fmt(Math.abs(target - arm), 1)} = ${fmt(w, 2)} kg` + (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : "")
       });
       steps.push({
         title: "5. Verify",
         formula: "CG = new IU × 10000 ÷ new W",
-        work: `new W ${fmt(newW, 1)} kg · CG ${fmt(newCG, 1)} mm ✓ on 2680`,
+        work: `new W ${fmt(newW, 1)} kg · CG ${fmt(newCG, 1)} mm ✓ on 2680`
       });
       summary.verdict = `${fixType === "add" ? "Add" : "Remove"} ${fmt(fixType === "add" ? wCeil : w, 1)} kg at ${armName} → CG on aft limit.`;
       summary.answer = fixType === "add" ? wCeil : w;
-      summary.plot = { before: { w: w0, cg: cg0 }, after: { w: newW, cg: newCG }, arm };
+      summary.plot = {
+        before: {
+          w: w0,
+          cg: cg0
+        },
+        after: {
+          w: newW,
+          cg: newCG
+        },
+        arm
+      };
     } else {
       // FORWARD limit — moving target → solve simultaneously (graphical intersection)
-      const res = solveToLimit({ W: w0, iu: iu0, arm, mode: fixType, side: "fwd" });
+      const res = solveToLimit({
+        W: w0,
+        iu: iu0,
+        arm,
+        mode: fixType,
+        side: "fwd"
+      });
       if (!res) {
         steps.push({
           title: "4. Forward limit (sloping) — no solution in range",
           formula: "solve CG(W₂) = (W₂−2360)×0.27+2400 simultaneously",
-          work: `No add/remove ≤ 900 kg at ${armName} brings the point onto the forward boundary. Check the station choice (arm ${arm}) — it may push the CG the wrong way.`,
+          work: `No add/remove ≤ 900 kg at ${armName} brings the point onto the forward boundary. Check the station choice (arm ${arm}) — it may push the CG the wrong way.`
         });
         summary.verdict = "No valid forward-limit solution at this station.";
-        return { steps, summary };
+        return {
+          steps,
+          summary
+        };
       }
       const wCeil = Math.ceil(res.w * 10) / 10;
       steps.push({
         title: `4. ${fixType === "add" ? "Add" : "Remove"} at ${armName} (arm ${arm}) — FORWARD limit (SLOPING)`,
         formula: "the fwd limit MOVES with weight, so solve CG(W₂) = (W₂−2360)×0.27+2400 together",
-        work:
-          `A fixed-limit formula would be wrong here (§6.6). Solving the moving-limit\n` +
-          `intersection (the graphical Fig-11 point, done exactly):\n` +
-          `${fixType === "add" ? "add" : "remove"} = ${fmt(res.w, 2)} kg` +
-          (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : ""),
+        work: `A fixed-limit formula would be wrong here (§6.6). Solving the moving-limit\n` + `intersection (the graphical Fig-11 point, done exactly):\n` + `${fixType === "add" ? "add" : "remove"} = ${fmt(res.w, 2)} kg` + (fixType === "add" ? `  → min, round UP → ${fmt(wCeil, 1)} kg` : "")
       });
       steps.push({
         title: "5. Verify on the sloping boundary",
         formula: "CG₂ must equal fwdLimit(W₂)",
-        work:
-          `new W = ${fmt(res.W2, 1)} kg\n` +
-          `CG₂ = ${fmt(res.CG2, 1)} mm\n` +
-          `fwd limit @ ${fmt(res.W2, 1)} kg = ${fmt(fwdLimit(res.W2), 1)} mm ✓ (on the line)`,
+        work: `new W = ${fmt(res.W2, 1)} kg\n` + `CG₂ = ${fmt(res.CG2, 1)} mm\n` + `fwd limit @ ${fmt(res.W2, 1)} kg = ${fmt(fwdLimit(res.W2), 1)} mm ✓ (on the line)`
       });
       const cap = ECHO.maxLoad[station];
       steps.push({
         title: "6. Sanity checks",
         formula: "compartment max · MTOW 2950",
-        work: `${cap ? `Station max ${cap} kg → ${res.w <= cap ? "OK" : "❌ exceeds"}. ` : ""}new W ${fmt(res.W2, 1)} vs MTOW 2950 → ${res.W2 <= 2950 ? "OK ✓" : "❌"}`,
+        work: `${cap ? `Station max ${cap} kg → ${res.w <= cap ? "OK" : "❌ exceeds"}. ` : ""}new W ${fmt(res.W2, 1)} vs MTOW 2950 → ${res.W2 <= 2950 ? "OK ✓" : "❌"}`
       });
       summary.verdict = `${fixType === "add" ? "Add" : "Remove"} ${fmt(fixType === "add" ? wCeil : res.w, 1)} kg at ${armName} → CG on the sloping forward limit (${fmt(res.CG2, 0)} mm @ ${fmt(res.W2, 0)} kg).`;
       summary.answer = fixType === "add" ? wCeil : res.w;
-      summary.plot = { before: { w: w0, cg: cg0 }, after: { w: res.W2, cg: res.CG2 }, arm };
+      summary.plot = {
+        before: {
+          w: w0,
+          cg: cg0
+        },
+        after: {
+          w: res.W2,
+          cg: res.CG2
+        },
+        arm
+      };
     }
   }
-
   if (fixType === "maxfuel") {
     const target = aft;
     const w = (target - cg0) * w0 / (arm - target);
@@ -234,102 +314,193 @@ function solve({ weight, iu, fixType, station, side }) {
     steps.push({
       title: `4. Max fuel into ${armName} (arm ${arm}) before aft CG limit`,
       formula: "w = (2680 − CG) × W ÷ (arm − 2680)",
-      work: `w = (2680 − ${fmt(cg0, 1)}) × ${fmt(w0)} ÷ (${arm} − 2680) = ${fmt(w, 2)} kg = ${fmt(usg, 1)} USG`,
+      work: `w = (2680 − ${fmt(cg0, 1)}) × ${fmt(w0)} ÷ (${arm} − 2680) = ${fmt(w, 2)} kg = ${fmt(usg, 1)} USG`
     });
     steps.push({
       title: "5. Which limit binds?",
       formula: "compare CG-limited fuel vs weight margin",
-      work: `CG-limited ${fmt(w, 1)} kg · weight margin to MTOW ${fmt(2950 - w0, 1)} kg → smaller binds`,
+      work: `CG-limited ${fmt(w, 1)} kg · weight margin to MTOW ${fmt(2950 - w0, 1)} kg → smaller binds`
     });
     summary.verdict = `Greatest fuel ≈ ${fmt(w, 1)} kg (${fmt(usg, 1)} USG) before aft CG limit.`;
     summary.answer = w;
-    summary.plot = { before: { w: w0, cg: cg0 }, after: { w: w0 + w, cg: target }, arm };
+    summary.plot = {
+      before: {
+        w: w0,
+        cg: cg0
+      },
+      after: {
+        w: w0 + w,
+        cg: target
+      },
+      arm
+    };
   }
-
-  return { steps, summary };
+  return {
+    steps,
+    summary
+  };
 }
 
 /* ── CG ENVELOPE GRAPH (SVG) ────────────────────────────────────────────── */
-function EnvelopeGraph({ plot, cg0, w0 }) {
+function EnvelopeGraph({
+  plot,
+  cg0,
+  w0
+}) {
   // axes: x = CG (2350–2720 mm), y = Weight (1900–2960 kg), weight increasing UP
-  const X0 = 2350, X1 = 2720, Y0 = ECHO.MIN_W, Y1 = 2960;
-  const W = 520, H = 380, padL = 54, padB = 40, padT = 16, padR = 14;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
-  const sx = (cg) => padL + ((cg - X0) / (X1 - X0)) * plotW;
-  const sy = (w) => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
+  const X0 = 2350,
+    X1 = 2720,
+    Y0 = ECHO.MIN_W,
+    Y1 = 2960;
+  const W = 520,
+    H = 380,
+    padL = 54,
+    padB = 40,
+    padT = 16,
+    padR = 14;
+  const plotW = W - padL - padR,
+    plotH = H - padT - padB;
+  const sx = cg => padL + (cg - X0) / (X1 - X0) * plotW;
+  const sy = w => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
 
   // envelope outline (clockwise): fwd corner low → up the sloping fwd limit → top → aft down
   const fwdPts = [];
   for (let w = Y0; w <= 2950; w += 10) fwdPts.push([sx(fwdLimit(w)), sy(w)]);
   const aftX = sx(ECHO.AFT_LIMIT);
-  const envPath =
-    `M ${fwdPts[0][0]} ${fwdPts[0][1]} ` +
-    fwdPts.slice(1).map((p) => `L ${p[0]} ${p[1]}`).join(" ") +
-    ` L ${aftX} ${sy(2950)} L ${aftX} ${sy(Y0)} Z`;
-
+  const envPath = `M ${fwdPts[0][0]} ${fwdPts[0][1]} ` + fwdPts.slice(1).map(p => `L ${p[0]} ${p[1]}`).join(" ") + ` L ${aftX} ${sy(2950)} L ${aftX} ${sy(Y0)} Z`;
   const gridW = [2000, 2200, 2400, 2600, 2725, 2800, 2950];
   const gridCG = [2400, 2500, 2600, 2680];
-
-  const before = plot?.before, after = plot?.after;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="eh-svg" role="img" aria-label="Echo CG envelope">
-      {/* plot bg */}
-      <rect x={padL} y={padT} width={plotW} height={plotH} fill="rgba(255,255,255,0.02)" stroke="var(--line)" />
-      {/* grid weight lines */}
-      {gridW.map((w) => (
-        <g key={"w" + w}>
-          <line x1={padL} y1={sy(w)} x2={W - padR} y2={sy(w)} stroke="var(--line)" strokeDasharray="2 4" opacity="0.5" />
-          <text x={padL - 6} y={sy(w) + 3} textAnchor="end" className="eh-axis">{w}</text>
-        </g>
-      ))}
-      {gridCG.map((cg) => (
-        <g key={"c" + cg}>
-          <line x1={sx(cg)} y1={padT} x2={sx(cg)} y2={H - padB} stroke="var(--line)" strokeDasharray="2 4" opacity="0.4" />
-          <text x={sx(cg)} y={H - padB + 14} textAnchor="middle" className="eh-axis">{cg}</text>
-        </g>
-      ))}
-      {/* envelope */}
-      <path d={envPath} fill="rgba(218,83,44,0.10)" stroke="var(--amber)" strokeWidth="2" />
-      {/* MTOW / MLW markers */}
-      <line x1={padL} y1={sy(2950)} x2={W - padR} y2={sy(2950)} stroke="var(--amber2)" strokeWidth="1" opacity="0.7" />
-      <text x={W - padR - 2} y={sy(2950) - 4} textAnchor="end" className="eh-axis" fill="var(--amber2)">MTOW 2950</text>
-      <line x1={padL} y1={sy(2725)} x2={W - padR} y2={sy(2725)} stroke="var(--good)" strokeDasharray="4 3" strokeWidth="1" opacity="0.7" />
-      <text x={W - padR - 2} y={sy(2725) - 4} textAnchor="end" className="eh-axis" fill="var(--good)">MLW 2725</text>
-
-      {/* before/after points + arrow */}
-      {before && after && (
-        <line x1={sx(before.cg)} y1={sy(before.w)} x2={sx(after.cg)} y2={sy(after.w)}
-          stroke="var(--ink)" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow)" />
-      )}
-      <defs>
-        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="var(--ink)" />
-        </marker>
-      </defs>
-      {before && (
-        <g>
-          <circle cx={sx(before.cg)} cy={sy(before.w)} r="5"
-            fill={(before.cg >= fwdLimit(before.w) && before.cg <= ECHO.AFT_LIMIT) ? "var(--good)" : "var(--bad)"}
-            stroke="#fff" strokeWidth="1.5" />
-          <text x={sx(before.cg) + 8} y={sy(before.w) - 6} className="eh-pt">before</text>
-        </g>
-      )}
-      {after && (
-        <g>
-          <circle cx={sx(after.cg)} cy={sy(after.w)} r="5" fill="var(--amber)" stroke="#fff" strokeWidth="1.5" />
-          <text x={sx(after.cg) + 8} y={sy(after.w) + 14} className="eh-pt">after</text>
-        </g>
-      )}
-      {!plot && cg0 && w0 && (
-        <circle cx={sx(cg0)} cy={sy(w0)} r="5"
-          fill={(cg0 >= fwdLimit(w0) && cg0 <= ECHO.AFT_LIMIT) ? "var(--good)" : "var(--bad)"}
-          stroke="#fff" strokeWidth="1.5" />
-      )}
-
-      <text x={padL} y={12} className="eh-axis">CG envelope · weight (kg) vs CG (mm)</text>
-    </svg>
-  );
+  const before = plot?.before,
+    after = plot?.after;
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    className: "eh-svg",
+    role: "img",
+    "aria-label": "Echo CG envelope"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: padL,
+    y: padT,
+    width: plotW,
+    height: plotH,
+    fill: "rgba(255,255,255,0.02)",
+    stroke: "var(--line)"
+  }), gridW.map(w => /*#__PURE__*/React.createElement("g", {
+    key: "w" + w
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(w),
+    x2: W - padR,
+    y2: sy(w),
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL - 6,
+    y: sy(w) + 3,
+    textAnchor: "end",
+    className: "eh-axis"
+  }, w))), gridCG.map(cg => /*#__PURE__*/React.createElement("g", {
+    key: "c" + cg
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: sx(cg),
+    y1: padT,
+    x2: sx(cg),
+    y2: H - padB,
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.4"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(cg),
+    y: H - padB + 14,
+    textAnchor: "middle",
+    className: "eh-axis"
+  }, cg))), /*#__PURE__*/React.createElement("path", {
+    d: envPath,
+    fill: "rgba(218,83,44,0.10)",
+    stroke: "var(--amber)",
+    strokeWidth: "2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(2950),
+    x2: W - padR,
+    y2: sy(2950),
+    stroke: "var(--amber2)",
+    strokeWidth: "1",
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: W - padR - 2,
+    y: sy(2950) - 4,
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--amber2)"
+  }, "MTOW 2950"), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(2725),
+    x2: W - padR,
+    y2: sy(2725),
+    stroke: "var(--good)",
+    strokeDasharray: "4 3",
+    strokeWidth: "1",
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: W - padR - 2,
+    y: sy(2725) - 4,
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--good)"
+  }, "MLW 2725"), before && after && /*#__PURE__*/React.createElement("line", {
+    x1: sx(before.cg),
+    y1: sy(before.w),
+    x2: sx(after.cg),
+    y2: sy(after.w),
+    stroke: "var(--ink)",
+    strokeWidth: "1.5",
+    strokeDasharray: "3 3",
+    markerEnd: "url(#arrow)"
+  }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+    id: "arrow",
+    markerWidth: "8",
+    markerHeight: "8",
+    refX: "6",
+    refY: "3",
+    orient: "auto"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M0,0 L6,3 L0,6 Z",
+    fill: "var(--ink)"
+  }))), before && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+    cx: sx(before.cg),
+    cy: sy(before.w),
+    r: "5",
+    fill: before.cg >= fwdLimit(before.w) && before.cg <= ECHO.AFT_LIMIT ? "var(--good)" : "var(--bad)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(before.cg) + 8,
+    y: sy(before.w) - 6,
+    className: "eh-pt"
+  }, "before")), after && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+    cx: sx(after.cg),
+    cy: sy(after.w),
+    r: "5",
+    fill: "var(--amber)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(after.cg) + 8,
+    y: sy(after.w) + 14,
+    className: "eh-pt"
+  }, "after")), !plot && cg0 && w0 && /*#__PURE__*/React.createElement("circle", {
+    cx: sx(cg0),
+    cy: sy(w0),
+    r: "5",
+    fill: cg0 >= fwdLimit(w0) && cg0 <= ECHO.AFT_LIMIT ? "var(--good)" : "var(--bad)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL,
+    y: 12,
+    className: "eh-axis"
+  }, "CG envelope \xB7 weight (kg) vs CG (mm)"));
 }
 
 /* ── WORKBOOK-STYLE LOADING CHART: Index (IU) vs Weight ─────────────────────
@@ -338,118 +509,252 @@ function EnvelopeGraph({ plot, cg0, w0 }) {
    Forward boundary IU = fwdLimit(W)·W/10000 ; Aft boundary IU = 2680·W/10000.
    Weight on the vertical axis (workbook convention).
    ───────────────────────────────────────────────────────────────────────── */
-const iuFwd = (w) => (fwdLimit(w) * w) / 10000;
-const iuAft = (w) => (ECHO.AFT_LIMIT * w) / 10000;
-
-function IndexGraph({ plot, cg0, w0 }) {
+const iuFwd = w => fwdLimit(w) * w / 10000;
+const iuAft = w => ECHO.AFT_LIMIT * w / 10000;
+function IndexGraph({
+  plot,
+  cg0,
+  w0
+}) {
   // x = Index Units, y = Weight (kg), weight increasing UP
-  const Y0 = ECHO.MIN_W, Y1 = 2990;
+  const Y0 = ECHO.MIN_W,
+    Y1 = 2990;
   // x range from a little under the lightest fwd IU to a little over the heaviest aft IU
   const X0 = Math.floor(iuFwd(Y0) / 20) * 20 - 20;
   const X1 = Math.ceil(iuAft(2950) / 20) * 20 + 20;
-  const W = 520, H = 380, padL = 58, padB = 40, padT = 16, padR = 14;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
-  const sx = (iu) => padL + ((iu - X0) / (X1 - X0)) * plotW;
-  const sy = (w) => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
+  const W = 520,
+    H = 380,
+    padL = 58,
+    padB = 40,
+    padT = 16,
+    padR = 14;
+  const plotW = W - padL - padR,
+    plotH = H - padT - padB;
+  const sx = iu => padL + (iu - X0) / (X1 - X0) * plotW;
+  const sy = w => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
 
   // envelope: up the forward (curved) boundary, across the top, down the aft (straight) line
   const fwdPts = [];
   for (let w = Y0; w <= 2950; w += 10) fwdPts.push([sx(iuFwd(w)), sy(w)]);
   const aftPts = [];
   for (let w = 2950; w >= Y0; w -= 10) aftPts.push([sx(iuAft(w)), sy(w)]);
-  const envPath =
-    `M ${fwdPts[0][0]} ${fwdPts[0][1]} ` +
-    fwdPts.slice(1).map((p) => `L ${p[0]} ${p[1]}`).join(" ") +
-    ` ` + aftPts.map((p) => `L ${p[0]} ${p[1]}`).join(" ") + " Z";
-
+  const envPath = `M ${fwdPts[0][0]} ${fwdPts[0][1]} ` + fwdPts.slice(1).map(p => `L ${p[0]} ${p[1]}`).join(" ") + ` ` + aftPts.map(p => `L ${p[0]} ${p[1]}`).join(" ") + " Z";
   const gridW = [2000, 2200, 2400, 2600, 2725, 2800, 2950];
-  const iuFor = (w, cg) => (cg * w) / 10000;
-  const before = plot?.before, after = plot?.after;
-  const pB = before ? { x: sx(iuFor(before.w, before.cg)), y: sy(before.w), in: before.cg >= fwdLimit(before.w) && before.cg <= ECHO.AFT_LIMIT } : null;
-  const pA = after ? { x: sx(iuFor(after.w, after.cg)), y: sy(after.w) } : null;
+  const iuFor = (w, cg) => cg * w / 10000;
+  const before = plot?.before,
+    after = plot?.after;
+  const pB = before ? {
+    x: sx(iuFor(before.w, before.cg)),
+    y: sy(before.w),
+    in: before.cg >= fwdLimit(before.w) && before.cg <= ECHO.AFT_LIMIT
+  } : null;
+  const pA = after ? {
+    x: sx(iuFor(after.w, after.cg)),
+    y: sy(after.w)
+  } : null;
 
   // nice x gridlines
   const xTicks = [];
   for (let v = Math.ceil(X0 / 40) * 40; v <= X1; v += 40) xTicks.push(v);
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="eh-svg" role="img" aria-label="Echo index-vs-weight loading chart">
-      <rect x={padL} y={padT} width={plotW} height={plotH} fill="rgba(255,255,255,0.02)" stroke="var(--line)" />
-      {gridW.map((w) => (
-        <g key={"w" + w}>
-          <line x1={padL} y1={sy(w)} x2={W - padR} y2={sy(w)} stroke="var(--line)" strokeDasharray="2 4" opacity="0.5" />
-          <text x={padL - 6} y={sy(w) + 3} textAnchor="end" className="eh-axis">{w}</text>
-        </g>
-      ))}
-      {xTicks.map((v) => (
-        <g key={"x" + v}>
-          <line x1={sx(v)} y1={padT} x2={sx(v)} y2={H - padB} stroke="var(--line)" strokeDasharray="2 4" opacity="0.35" />
-          <text x={sx(v)} y={H - padB + 14} textAnchor="middle" className="eh-axis">{v}</text>
-        </g>
-      ))}
-      <path d={envPath} fill="rgba(218,83,44,0.10)" stroke="var(--amber)" strokeWidth="2" />
-
-      {/* boundary labels */}
-      <text x={sx(iuFwd(2600)) - 4} y={sy(2600)} textAnchor="end" className="eh-axis" fill="var(--amber2)">fwd limit</text>
-      <text x={sx(iuAft(2600)) + 4} y={sy(2600)} textAnchor="start" className="eh-axis" fill="var(--amber2)">aft limit</text>
-
-      {/* MTOW / MLW */}
-      <line x1={padL} y1={sy(2950)} x2={W - padR} y2={sy(2950)} stroke="var(--amber2)" strokeWidth="1" opacity="0.7" />
-      <text x={W - padR - 2} y={sy(2950) - 4} textAnchor="end" className="eh-axis" fill="var(--amber2)">MTOW 2950</text>
-      <line x1={padL} y1={sy(2725)} x2={W - padR} y2={sy(2725)} stroke="var(--good)" strokeDasharray="4 3" strokeWidth="1" opacity="0.7" />
-      <text x={W - padR - 2} y={sy(2725) - 4} textAnchor="end" className="eh-axis" fill="var(--good)">MLW 2725</text>
-
-      {/* Projections to the weight axis: read the weight difference = load to add/remove */}
-      {pB && pA && (() => {
-        const dw = Math.abs(after.w - before.w);
-        const addRemove = after.w > before.w ? "add" : "remove";
-        const midY = (pB.y + pA.y) / 2;
-        return (
-          <g>
-            {/* horizontal dashed lines from each point across to the weight axis */}
-            <line x1={padL} y1={pB.y} x2={pB.x} y2={pB.y} stroke="var(--dim)" strokeDasharray="3 3" strokeWidth="1" opacity="0.85" />
-            <line x1={padL} y1={pA.y} x2={pA.x} y2={pA.y} stroke="var(--amber2)" strokeDasharray="3 3" strokeWidth="1" opacity="0.9" />
-            {/* weight readings at the axis */}
-            <text x={padL + 3} y={pB.y - 3} className="eh-pt" fill="var(--dim)">{fmt(before.w, 0)}</text>
-            <text x={padL + 3} y={pA.y - 3} className="eh-pt" fill="var(--amber2)">{fmt(after.w, 0)}</text>
-            {/* Δweight bracket just inside the axis */}
-            <line x1={padL + 44} y1={pB.y} x2={padL + 44} y2={pA.y} stroke="var(--ink)" strokeWidth="1.5" />
-            <line x1={padL + 40} y1={pB.y} x2={padL + 44} y2={pB.y} stroke="var(--ink)" strokeWidth="1.5" />
-            <line x1={padL + 40} y1={pA.y} x2={padL + 44} y2={pA.y} stroke="var(--ink)" strokeWidth="1.5" />
-            <text x={padL + 49} y={midY + 3} className="eh-pt">{addRemove} {fmt(dw, 1)} kg</text>
-          </g>
-        );
-      })()}
-
-      {pB && pA && (
-        <line x1={pB.x} y1={pB.y} x2={pA.x} y2={pA.y} stroke="var(--ink)" strokeWidth="1.5" strokeDasharray="3 3" markerEnd="url(#arrow2)" />
-      )}
-      <defs>
-        <marker id="arrow2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="var(--ink)" />
-        </marker>
-      </defs>
-      {pB && (
-        <g>
-          <circle cx={pB.x} cy={pB.y} r="5" fill={pB.in ? "var(--good)" : "var(--bad)"} stroke="#fff" strokeWidth="1.5" />
-          <text x={pB.x + 8} y={pB.y - 6} className="eh-pt">before</text>
-        </g>
-      )}
-      {pA && (
-        <g>
-          <circle cx={pA.x} cy={pA.y} r="5" fill="var(--amber)" stroke="#fff" strokeWidth="1.5" />
-          <text x={pA.x + 8} y={pA.y + 14} className="eh-pt">after</text>
-        </g>
-      )}
-      {!plot && cg0 && w0 && (
-        <circle cx={sx(iuFor(w0, cg0))} cy={sy(w0)} r="5"
-          fill={(cg0 >= fwdLimit(w0) && cg0 <= ECHO.AFT_LIMIT) ? "var(--good)" : "var(--bad)"}
-          stroke="#fff" strokeWidth="1.5" />
-      )}
-
-      <text x={padL} y={12} className="eh-axis">Loading chart · weight (kg) vs index units (IU)</text>
-    </svg>
-  );
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    className: "eh-svg",
+    role: "img",
+    "aria-label": "Echo index-vs-weight loading chart"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: padL,
+    y: padT,
+    width: plotW,
+    height: plotH,
+    fill: "rgba(255,255,255,0.02)",
+    stroke: "var(--line)"
+  }), gridW.map(w => /*#__PURE__*/React.createElement("g", {
+    key: "w" + w
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(w),
+    x2: W - padR,
+    y2: sy(w),
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL - 6,
+    y: sy(w) + 3,
+    textAnchor: "end",
+    className: "eh-axis"
+  }, w))), xTicks.map(v => /*#__PURE__*/React.createElement("g", {
+    key: "x" + v
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: sx(v),
+    y1: padT,
+    x2: sx(v),
+    y2: H - padB,
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.35"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(v),
+    y: H - padB + 14,
+    textAnchor: "middle",
+    className: "eh-axis"
+  }, v))), /*#__PURE__*/React.createElement("path", {
+    d: envPath,
+    fill: "rgba(218,83,44,0.10)",
+    stroke: "var(--amber)",
+    strokeWidth: "2"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(iuFwd(2600)) - 4,
+    y: sy(2600),
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--amber2)"
+  }, "fwd limit"), /*#__PURE__*/React.createElement("text", {
+    x: sx(iuAft(2600)) + 4,
+    y: sy(2600),
+    textAnchor: "start",
+    className: "eh-axis",
+    fill: "var(--amber2)"
+  }, "aft limit"), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(2950),
+    x2: W - padR,
+    y2: sy(2950),
+    stroke: "var(--amber2)",
+    strokeWidth: "1",
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: W - padR - 2,
+    y: sy(2950) - 4,
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--amber2)"
+  }, "MTOW 2950"), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(2725),
+    x2: W - padR,
+    y2: sy(2725),
+    stroke: "var(--good)",
+    strokeDasharray: "4 3",
+    strokeWidth: "1",
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: W - padR - 2,
+    y: sy(2725) - 4,
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--good)"
+  }, "MLW 2725"), pB && pA && (() => {
+    const dw = Math.abs(after.w - before.w);
+    const addRemove = after.w > before.w ? "add" : "remove";
+    const midY = (pB.y + pA.y) / 2;
+    return /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("line", {
+      x1: padL,
+      y1: pB.y,
+      x2: pB.x,
+      y2: pB.y,
+      stroke: "var(--dim)",
+      strokeDasharray: "3 3",
+      strokeWidth: "1",
+      opacity: "0.85"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: padL,
+      y1: pA.y,
+      x2: pA.x,
+      y2: pA.y,
+      stroke: "var(--amber2)",
+      strokeDasharray: "3 3",
+      strokeWidth: "1",
+      opacity: "0.9"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: padL + 3,
+      y: pB.y - 3,
+      className: "eh-pt",
+      fill: "var(--dim)"
+    }, fmt(before.w, 0)), /*#__PURE__*/React.createElement("text", {
+      x: padL + 3,
+      y: pA.y - 3,
+      className: "eh-pt",
+      fill: "var(--amber2)"
+    }, fmt(after.w, 0)), /*#__PURE__*/React.createElement("line", {
+      x1: padL + 44,
+      y1: pB.y,
+      x2: padL + 44,
+      y2: pA.y,
+      stroke: "var(--ink)",
+      strokeWidth: "1.5"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: padL + 40,
+      y1: pB.y,
+      x2: padL + 44,
+      y2: pB.y,
+      stroke: "var(--ink)",
+      strokeWidth: "1.5"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: padL + 40,
+      y1: pA.y,
+      x2: padL + 44,
+      y2: pA.y,
+      stroke: "var(--ink)",
+      strokeWidth: "1.5"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: padL + 49,
+      y: midY + 3,
+      className: "eh-pt"
+    }, addRemove, " ", fmt(dw, 1), " kg"));
+  })(), pB && pA && /*#__PURE__*/React.createElement("line", {
+    x1: pB.x,
+    y1: pB.y,
+    x2: pA.x,
+    y2: pA.y,
+    stroke: "var(--ink)",
+    strokeWidth: "1.5",
+    strokeDasharray: "3 3",
+    markerEnd: "url(#arrow2)"
+  }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+    id: "arrow2",
+    markerWidth: "8",
+    markerHeight: "8",
+    refX: "6",
+    refY: "3",
+    orient: "auto"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M0,0 L6,3 L0,6 Z",
+    fill: "var(--ink)"
+  }))), pB && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+    cx: pB.x,
+    cy: pB.y,
+    r: "5",
+    fill: pB.in ? "var(--good)" : "var(--bad)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: pB.x + 8,
+    y: pB.y - 6,
+    className: "eh-pt"
+  }, "before")), pA && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+    cx: pA.x,
+    cy: pA.y,
+    r: "5",
+    fill: "var(--amber)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: pA.x + 8,
+    y: pA.y + 14,
+    className: "eh-pt"
+  }, "after")), !plot && cg0 && w0 && /*#__PURE__*/React.createElement("circle", {
+    cx: sx(iuFor(w0, cg0)),
+    cy: sy(w0),
+    r: "5",
+    fill: cg0 >= fwdLimit(w0) && cg0 <= ECHO.AFT_LIMIT ? "var(--good)" : "var(--bad)",
+    stroke: "#fff",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL,
+    y: 12,
+    className: "eh-axis"
+  }, "Loading chart \xB7 weight (kg) vs index units (IU)"));
 }
 
 /* ── UI ─────────────────────────────────────────────────────────────────── */
@@ -464,13 +769,17 @@ function EchoLoadingHelper() {
   const [q, setQ] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [variant, setVariant] = useState("all");
-
-  const result = useMemo(
-    () => solve({ weight, iu, fixType, station, side }),
-    [weight, iu, fixType, station, side]
-  );
-
-  function newQuestion(useVariant = variant) { setQ(generateQuestion(useVariant)); setShowAnswer(false); }
+  const result = useMemo(() => solve({
+    weight,
+    iu,
+    fixType,
+    station,
+    side
+  }), [weight, iu, fixType, station, side]);
+  function newQuestion(useVariant = variant) {
+    setQ(generateQuestion(useVariant));
+    setShowAnswer(false);
+  }
   function loadQuestionIntoSolver() {
     if (!q?.preset) return;
     setWeight(String(q.preset.weight));
@@ -481,256 +790,353 @@ function EchoLoadingHelper() {
     setTab("solve");
   }
   const qResult = q ? solve(q.preset) : null;
-
   const showGraph = result.summary && !result.error;
-
-  return (
-    <div className="eh-root">
-      <style>{CSS}</style>
-
-      <header className="eh-head">
-        <div className="eh-badge">
-          <span className="eh-badge-ltf">LTF</span>
-          <span className="eh-badge-echo">ECHO</span>
-        </div>
-        <div>
-          <h1>Echo Loading Helper</h1>
-          <p className="eh-sub">Learn To Fly Melbourne · YMMB Moorabbin · Weight &amp; Balance · Loading System Echo</p>
-        </div>
-        <div className="eh-tail">VH-ECHO</div>
-      </header>
-
-      <nav className="eh-tabs">
-        <button className={tab === "solve" ? "on" : ""} onClick={() => setTab("solve")}>Solver</button>
-        <button className={tab === "practice" ? "on" : ""} onClick={() => setTab("practice")}>Practice</button>
-        <button className={tab === "ref" ? "on" : ""} onClick={() => setTab("ref")}>Echo data</button>
-      </nav>
-
-      {tab === "solve" && (
-        <section className="eh-panel">
-          <div className="eh-inputs">
-            <label><span>Weight (kg)</span>
-              <input type="number" inputMode="decimal" value={weight}
-                onChange={(e) => setWeight(e.target.value)} placeholder="2540" /></label>
-            <label><span>Moment index (IU)</span>
-              <input type="number" inputMode="decimal" value={iu}
-                onChange={(e) => setIU(e.target.value)} placeholder="680" /></label>
-            <label><span>What to do</span>
-              <select value={fixType} onChange={(e) => setFixType(e.target.value)}>
-                <option value="none">Just check limits</option>
-                <option value="add">Add ballast / load</option>
-                <option value="remove">Remove load</option>
-                <option value="maxfuel">Max fuel into a tank</option>
-              </select></label>
-            <label><span>Station</span>
-              <select value={station} onChange={(e) => setStation(e.target.value)}>
-                {Object.keys(STATION_LABEL).map((k) => (
-                  <option key={k} value={k}>{STATION_LABEL[k]} (arm {ECHO.arms[k]})</option>
-                ))}
-              </select></label>
-            <label><span>Work to which limit</span>
-              <select value={side} onChange={(e) => setSide(e.target.value)}>
-                <option value="auto">Auto (whichever is exceeded)</option>
-                <option value="fwd">Forward limit (sloping — graphical)</option>
-                <option value="aft">Aft limit (2680, fixed)</option>
-              </select></label>
-          </div>
-
-          {result.error && <div className="eh-note">{result.error}</div>}
-
-          {showGraph && (
-            <div className="eh-graphwrap">
-              <div className="eh-graphtabs">
-                <button className={graphView === "cg" ? "gt on" : "gt"} onClick={() => setGraphView("cg")}>CG vs weight</button>
-                <button className={graphView === "iu" ? "gt on" : "gt"} onClick={() => setGraphView("iu")}>Loading chart (IU) · workbook style</button>
-              </div>
-              {graphView === "cg"
-                ? <EnvelopeGraph plot={result.summary.plot} cg0={result.summary.cg0} w0={result.summary.w0} />
-                : <IndexGraph plot={result.summary.plot} cg0={result.summary.cg0} w0={result.summary.w0} />}
-            </div>
-          )}
-
-          <div className="eh-steps">
-            {result.steps.map((s, i) => (
-              <div className="eh-step" key={i}>
-                <div className="eh-step-title">{s.title}</div>
-                <div className="eh-formula">{s.formula}</div>
-                <pre className="eh-work">{s.work}</pre>
-              </div>
-            ))}
-          </div>
-
-          {result.summary?.verdict && (
-            <div className="eh-verdict"><span className="eh-verdict-tag">RESULT</span>{result.summary.verdict}</div>
-          )}
-        </section>
-      )}
-
-      {tab === "practice" && (
-        <section className="eh-panel">
-          <div className="eh-varbar">
-            <span className="eh-varlabel">Practise:</span>
-            <button className={variant === "all" ? "chip on" : "chip"}
-              onClick={() => { setVariant("all"); newQuestion("all"); }}>All variants</button>
-            {VARIANT_ORDER.map((k) => (
-              <button key={k} className={variant === k ? "chip on" : "chip"}
-                onClick={() => { setVariant(k); newQuestion(k); }}>{VARIANTS[k].label}</button>
-            ))}
-          </div>
-
-          {!q && (
-            <div className="eh-empty">
-              <p>Pick a variant above to drill it, or choose “All variants” for a random mix — including forward-limit problems that need the sloping envelope. Each comes with a full worked solution.</p>
-              <button className="eh-primary" onClick={() => newQuestion("all")}>Generate a question</button>
-            </div>
-          )}
-          {q && (
-            <>
-              <div className="eh-question">
-                <div className="eh-qhead">
-                  <span className="eh-qtag">QUESTION</span>
-                  <span className="eh-qtype">{q.type}</span>
-                </div>
-                <p>{q.prompt}</p>
-              </div>
-              <div className="eh-actions">
-                <button className="eh-primary" onClick={() => setShowAnswer((v) => !v)}>
-                  {showAnswer ? "Hide worked answer" : "Show worked answer"}
-                </button>
-                <button className="eh-ghost" onClick={loadQuestionIntoSolver}>Open in solver</button>
-                <button className="eh-ghost" onClick={() => newQuestion()}>New question</button>
-              </div>
-              {showAnswer && qResult && (
-                <>
-                  {qResult.summary?.plot && (
-                    <div className="eh-graphwrap">
-                      <div className="eh-graphtabs">
-                        <button className={graphView === "cg" ? "gt on" : "gt"} onClick={() => setGraphView("cg")}>CG vs weight</button>
-                        <button className={graphView === "iu" ? "gt on" : "gt"} onClick={() => setGraphView("iu")}>Loading chart (IU) · workbook style</button>
-                      </div>
-                      {graphView === "cg"
-                        ? <EnvelopeGraph plot={qResult.summary.plot} cg0={qResult.summary.cg0} w0={qResult.summary.w0} />
-                        : <IndexGraph plot={qResult.summary.plot} cg0={qResult.summary.cg0} w0={qResult.summary.w0} />}
-                    </div>
-                  )}
-                  <div className="eh-steps">
-                    {qResult.steps.map((s, i) => (
-                      <div className="eh-step" key={i}>
-                        <div className="eh-step-title">{s.title}</div>
-                        <div className="eh-formula">{s.formula}</div>
-                        <pre className="eh-work">{s.work}</pre>
-                      </div>
-                    ))}
-                    {qResult.summary?.verdict && (
-                      <div className="eh-verdict"><span className="eh-verdict-tag">ANSWER</span>{qResult.summary.verdict}</div>
-                    )}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </section>
-      )}
-
-      {tab === "ref" && (
-        <section className="eh-panel eh-ref">
-          <div className="eh-refgrid">
-            <RefCard title="Weight limits">
-              <Row k="MTOW" v="2950 kg" /><Row k="MLW" v="2725 kg" /><Row k="MZFW" v="2630 kg" />
-            </RefCard>
-            <RefCard title="CG limits">
-              <Row k="AFT (all wts)" v="2680 mm" />
-              <Row k="FWD ≤2360 kg" v="2400 mm" />
-              <Row k="FWD @2950 kg" v="2560 mm" />
-              <Row k="FWD slope" v="0.27 mm/kg" />
-            </RefCard>
-            <RefCard title="Formulas">
-              <Row k="CG" v="IU×10000 ÷ W" />
-              <Row k="IU" v="W×arm ÷ 10000" />
-              <Row k="MAC%" v="(CG−2190)/1900×100" />
-              <Row k="Aft ballast" v="W×|CG−2680| ÷ |2680−arm|" />
-              <Row k="Fwd ballast" v="solve on sloping line" />
-            </RefCard>
-            <RefCard title="Stations (arm / max)">
-              {Object.keys(STATION_LABEL).map((k) => (
-                <Row key={k} k={STATION_LABEL[k]} v={`${ECHO.arms[k]}${ECHO.maxLoad[k] ? " / " + ECHO.maxLoad[k] + "kg" : ""}`} />
-              ))}
-            </RefCard>
-            <RefCard title="Conversions">
-              <Row k="AVGAS" v="2.72 kg/USG" /><Row k="1 USG" v="3.785 L" />
-              <Row k="Std person" v="77 kg" /><Row k="Seat" v="5 kg each" />
-            </RefCard>
-            <RefCard title="Direction rules">
-              <Row k="Add weight" v="CG → toward its arm" />
-              <Row k="Burn mains (1780)" v="CG moves AFT" />
-              <Row k="Burn aux (2800)" v="CG moves FWD" />
-            </RefCard>
-          </div>
-          <div className="eh-slopenote">
-            <strong>Forward vs aft — why the graph matters.</strong> The aft limit is 2680 mm at every weight, so
-            add / remove / shift to the aft limit is always formula-valid. The forward limit <em>slopes</em> (2400 mm
-            up to 2360 kg, then rearward at 0.27 mm/kg to 2560 mm at 2950 kg), so when you add or remove weight the
-            target limit moves as you go. This app solves that intersection exactly — the same point you'd read off
-            Fig 11 graphically — and plots it on the envelope above.
-          </div>
-          <p className="eh-disclaimer">
-            Student study aid for CPL Flight Planning, built from CASA RPL/PPL/CPL Workbook v3.0a data. Not an official
-            Learn To Fly Melbourne document and not for operational use — always cross-check against the current
-            workbook, the Part 91/135 MOS, and your instructor.
-          </p>
-        </section>
-      )}
-
-      <footer className="eh-version">
-        {APP_VERSION.tag} · {APP_VERSION.date} · {APP_VERSION.note}
-      </footer>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-root"
+  }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement("header", {
+    className: "eh-head"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-badge"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-badge-ltf"
+  }, "LTF"), /*#__PURE__*/React.createElement("span", {
+    className: "eh-badge-echo"
+  }, "ECHO")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", null, "Echo Loading Helper"), /*#__PURE__*/React.createElement("p", {
+    className: "eh-sub"
+  }, "Learn To Fly Melbourne \xB7 YMMB Moorabbin \xB7 Weight & Balance \xB7 Loading System Echo")), /*#__PURE__*/React.createElement("div", {
+    className: "eh-tail"
+  }, "VH-ECHO")), /*#__PURE__*/React.createElement("nav", {
+    className: "eh-tabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: tab === "solve" ? "on" : "",
+    onClick: () => setTab("solve")
+  }, "Solver"), /*#__PURE__*/React.createElement("button", {
+    className: tab === "practice" ? "on" : "",
+    onClick: () => setTab("practice")
+  }, "Practice"), /*#__PURE__*/React.createElement("button", {
+    className: tab === "ref" ? "on" : "",
+    onClick: () => setTab("ref")
+  }, "Echo data")), tab === "solve" && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-inputs"
+  }, /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("span", null, "Weight (kg)"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "decimal",
+    value: weight,
+    onChange: e => setWeight(e.target.value),
+    placeholder: "2540"
+  })), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("span", null, "Moment index (IU)"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "decimal",
+    value: iu,
+    onChange: e => setIU(e.target.value),
+    placeholder: "680"
+  })), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("span", null, "What to do"), /*#__PURE__*/React.createElement("select", {
+    value: fixType,
+    onChange: e => setFixType(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "none"
+  }, "Just check limits"), /*#__PURE__*/React.createElement("option", {
+    value: "add"
+  }, "Add ballast / load"), /*#__PURE__*/React.createElement("option", {
+    value: "remove"
+  }, "Remove load"), /*#__PURE__*/React.createElement("option", {
+    value: "maxfuel"
+  }, "Max fuel into a tank"))), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("span", null, "Station"), /*#__PURE__*/React.createElement("select", {
+    value: station,
+    onChange: e => setStation(e.target.value)
+  }, Object.keys(STATION_LABEL).map(k => /*#__PURE__*/React.createElement("option", {
+    key: k,
+    value: k
+  }, STATION_LABEL[k], " (arm ", ECHO.arms[k], ")")))), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("span", null, "Work to which limit"), /*#__PURE__*/React.createElement("select", {
+    value: side,
+    onChange: e => setSide(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "auto"
+  }, "Auto (whichever is exceeded)"), /*#__PURE__*/React.createElement("option", {
+    value: "fwd"
+  }, "Forward limit (sloping \u2014 graphical)"), /*#__PURE__*/React.createElement("option", {
+    value: "aft"
+  }, "Aft limit (2680, fixed)")))), result.error && /*#__PURE__*/React.createElement("div", {
+    className: "eh-note"
+  }, result.error), showGraph && /*#__PURE__*/React.createElement("div", {
+    className: "eh-graphwrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-graphtabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: graphView === "cg" ? "gt on" : "gt",
+    onClick: () => setGraphView("cg")
+  }, "CG vs weight"), /*#__PURE__*/React.createElement("button", {
+    className: graphView === "iu" ? "gt on" : "gt",
+    onClick: () => setGraphView("iu")
+  }, "Loading chart (IU) \xB7 workbook style")), graphView === "cg" ? /*#__PURE__*/React.createElement(EnvelopeGraph, {
+    plot: result.summary.plot,
+    cg0: result.summary.cg0,
+    w0: result.summary.w0
+  }) : /*#__PURE__*/React.createElement(IndexGraph, {
+    plot: result.summary.plot,
+    cg0: result.summary.cg0,
+    w0: result.summary.w0
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "eh-steps"
+  }, result.steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    className: "eh-step",
+    key: i
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-step-title"
+  }, s.title), /*#__PURE__*/React.createElement("div", {
+    className: "eh-formula"
+  }, s.formula), /*#__PURE__*/React.createElement("pre", {
+    className: "eh-work"
+  }, s.work)))), result.summary?.verdict && /*#__PURE__*/React.createElement("div", {
+    className: "eh-verdict"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-verdict-tag"
+  }, "RESULT"), result.summary.verdict)), tab === "practice" && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-varbar"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-varlabel"
+  }, "Practise:"), /*#__PURE__*/React.createElement("button", {
+    className: variant === "all" ? "chip on" : "chip",
+    onClick: () => {
+      setVariant("all");
+      newQuestion("all");
+    }
+  }, "All variants"), VARIANT_ORDER.map(k => /*#__PURE__*/React.createElement("button", {
+    key: k,
+    className: variant === k ? "chip on" : "chip",
+    onClick: () => {
+      setVariant(k);
+      newQuestion(k);
+    }
+  }, VARIANTS[k].label))), !q && /*#__PURE__*/React.createElement("div", {
+    className: "eh-empty"
+  }, /*#__PURE__*/React.createElement("p", null, "Pick a variant above to drill it, or choose \u201CAll variants\u201D for a random mix \u2014 including forward-limit problems that need the sloping envelope. Each comes with a full worked solution."), /*#__PURE__*/React.createElement("button", {
+    className: "eh-primary",
+    onClick: () => newQuestion("all")
+  }, "Generate a question")), q && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "eh-question"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-qhead"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtag"
+  }, "QUESTION"), /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtype"
+  }, q.type)), /*#__PURE__*/React.createElement("p", null, q.prompt)), /*#__PURE__*/React.createElement("div", {
+    className: "eh-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "eh-primary",
+    onClick: () => setShowAnswer(v => !v)
+  }, showAnswer ? "Hide worked answer" : "Show worked answer"), /*#__PURE__*/React.createElement("button", {
+    className: "eh-ghost",
+    onClick: loadQuestionIntoSolver
+  }, "Open in solver"), /*#__PURE__*/React.createElement("button", {
+    className: "eh-ghost",
+    onClick: () => newQuestion()
+  }, "New question")), showAnswer && qResult && /*#__PURE__*/React.createElement(React.Fragment, null, qResult.summary?.plot && /*#__PURE__*/React.createElement("div", {
+    className: "eh-graphwrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-graphtabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: graphView === "cg" ? "gt on" : "gt",
+    onClick: () => setGraphView("cg")
+  }, "CG vs weight"), /*#__PURE__*/React.createElement("button", {
+    className: graphView === "iu" ? "gt on" : "gt",
+    onClick: () => setGraphView("iu")
+  }, "Loading chart (IU) \xB7 workbook style")), graphView === "cg" ? /*#__PURE__*/React.createElement(EnvelopeGraph, {
+    plot: qResult.summary.plot,
+    cg0: qResult.summary.cg0,
+    w0: qResult.summary.w0
+  }) : /*#__PURE__*/React.createElement(IndexGraph, {
+    plot: qResult.summary.plot,
+    cg0: qResult.summary.cg0,
+    w0: qResult.summary.w0
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "eh-steps"
+  }, qResult.steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    className: "eh-step",
+    key: i
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-step-title"
+  }, s.title), /*#__PURE__*/React.createElement("div", {
+    className: "eh-formula"
+  }, s.formula), /*#__PURE__*/React.createElement("pre", {
+    className: "eh-work"
+  }, s.work))), qResult.summary?.verdict && /*#__PURE__*/React.createElement("div", {
+    className: "eh-verdict"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-verdict-tag"
+  }, "ANSWER"), qResult.summary.verdict))))), tab === "ref" && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel eh-ref"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-refgrid"
+  }, /*#__PURE__*/React.createElement(RefCard, {
+    title: "Weight limits"
+  }, /*#__PURE__*/React.createElement(Row, {
+    k: "MTOW",
+    v: "2950 kg"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "MLW",
+    v: "2725 kg"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "MZFW",
+    v: "2630 kg"
+  })), /*#__PURE__*/React.createElement(RefCard, {
+    title: "CG limits"
+  }, /*#__PURE__*/React.createElement(Row, {
+    k: "AFT (all wts)",
+    v: "2680 mm"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "FWD \u22642360 kg",
+    v: "2400 mm"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "FWD @2950 kg",
+    v: "2560 mm"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "FWD slope",
+    v: "0.27 mm/kg"
+  })), /*#__PURE__*/React.createElement(RefCard, {
+    title: "Formulas"
+  }, /*#__PURE__*/React.createElement(Row, {
+    k: "CG",
+    v: "IU\xD710000 \xF7 W"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "IU",
+    v: "W\xD7arm \xF7 10000"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "MAC%",
+    v: "(CG\u22122190)/1900\xD7100"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Aft ballast",
+    v: "W\xD7|CG\u22122680| \xF7 |2680\u2212arm|"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Fwd ballast",
+    v: "solve on sloping line"
+  })), /*#__PURE__*/React.createElement(RefCard, {
+    title: "Stations (arm / max)"
+  }, Object.keys(STATION_LABEL).map(k => /*#__PURE__*/React.createElement(Row, {
+    key: k,
+    k: STATION_LABEL[k],
+    v: `${ECHO.arms[k]}${ECHO.maxLoad[k] ? " / " + ECHO.maxLoad[k] + "kg" : ""}`
+  }))), /*#__PURE__*/React.createElement(RefCard, {
+    title: "Conversions"
+  }, /*#__PURE__*/React.createElement(Row, {
+    k: "AVGAS",
+    v: "2.72 kg/USG"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "1 USG",
+    v: "3.785 L"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Std person",
+    v: "77 kg"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Seat",
+    v: "5 kg each"
+  })), /*#__PURE__*/React.createElement(RefCard, {
+    title: "Direction rules"
+  }, /*#__PURE__*/React.createElement(Row, {
+    k: "Add weight",
+    v: "CG \u2192 toward its arm"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Burn mains (1780)",
+    v: "CG moves AFT"
+  }), /*#__PURE__*/React.createElement(Row, {
+    k: "Burn aux (2800)",
+    v: "CG moves FWD"
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "eh-slopenote"
+  }, /*#__PURE__*/React.createElement("strong", null, "Forward vs aft \u2014 why the graph matters."), " The aft limit is 2680 mm at every weight, so add / remove / shift to the aft limit is always formula-valid. The forward limit ", /*#__PURE__*/React.createElement("em", null, "slopes"), " (2400 mm up to 2360 kg, then rearward at 0.27 mm/kg to 2560 mm at 2950 kg), so when you add or remove weight the target limit moves as you go. This app solves that intersection exactly \u2014 the same point you'd read off Fig 11 graphically \u2014 and plots it on the envelope above."), /*#__PURE__*/React.createElement("p", {
+    className: "eh-disclaimer"
+  }, "Student study aid for CPL Flight Planning, built from CASA RPL/PPL/CPL Workbook v3.0a data. Not an official Learn To Fly Melbourne document and not for operational use \u2014 always cross-check against the current workbook, the Part 91/135 MOS, and your instructor.")), /*#__PURE__*/React.createElement("footer", {
+    className: "eh-version"
+  }, APP_VERSION.tag, " \xB7 ", APP_VERSION.date, " \xB7 ", APP_VERSION.note));
 }
-
-function RefCard({ title, children }) {
-  return <div className="eh-card"><h3>{title}</h3>{children}</div>;
+function RefCard({
+  title,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-card"
+  }, /*#__PURE__*/React.createElement("h3", null, title), children);
 }
-function Row({ k, v }) {
-  return <div className="eh-row"><span className="eh-k">{k}</span><span className="eh-v">{v}</span></div>;
+function Row({
+  k,
+  v
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-row"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-k"
+  }, k), /*#__PURE__*/React.createElement("span", {
+    className: "eh-v"
+  }, v));
 }
 
 /* ── QUESTION GENERATOR (Echo W&B only) ─────────────────────────────────── */
 const rand = (lo, hi, stp = 1) => Math.round((lo + Math.random() * (hi - lo)) / stp) * stp;
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 // Each generator keyed so the Practice tab can offer them individually.
 const VARIANTS = {
   addAft: {
     label: "Add ballast — aft limit",
     gen() {
-      const w = rand(2500, 2600, 10), cg = rand(2690, 2725);
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Add ballast — aft limit",
+      const w = rand(2500, 2600, 10),
+        cg = rand(2690, 2725);
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Add ballast — aft limit",
         prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU (CG too far aft). Minimum ballast to add to the forward compartment (arm 500) to reach the aft limit?`,
-        preset: { weight: w, iu, fixType: "add", station: "fwd", side: "aft" } };
-    },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "add",
+          station: "fwd",
+          side: "aft"
+        }
+      };
+    }
   },
   removeAft: {
     label: "Remove load — aft limit",
     gen() {
-      const w = rand(2500, 2600, 10), cg = rand(2695, 2735);
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Remove load — aft limit",
+      const w = rand(2500, 2600, 10),
+        cg = rand(2695, 2735);
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Remove load — aft limit",
         prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU. Load sits in the rear compartment (arm 5000). How much to remove to reach the aft limit?`,
-        preset: { weight: w, iu, fixType: "remove", station: "rear", side: "aft" } };
-    },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "remove",
+          station: "rear",
+          side: "aft"
+        }
+      };
+    }
   },
   fwdAdd: {
     label: "Forward limit — add load (graphical)",
     gen() {
       const w = rand(2450, 2560, 10);
       const cg = fwdLimit(w) - rand(8, 25); // genuinely forward of the sloping limit
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Forward limit — add load (graphical)",
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Forward limit — add load (graphical)",
         prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU, with the CG too far forward. How much must be added to the rear compartment (arm 5000) to bring the CG onto the (sloping) forward limit? Note the forward limit moves with weight.`,
-        preset: { weight: w, iu, fixType: "add", station: "rear", side: "fwd" } };
-    },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "add",
+          station: "rear",
+          side: "fwd"
+        }
+      };
+    }
   },
   fwdRemove: {
     label: "Forward limit — remove load (graphical)",
@@ -739,41 +1145,64 @@ const VARIANTS = {
       // so the required removal is real and loadable.
       const w = rand(2450, 2560, 10);
       const cg = fwdLimit(w) - rand(8, 22); // 8–22 mm forward of the limit
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Forward limit — remove load (graphical)",
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Forward limit — remove load (graphical)",
         prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU, CG forward of limits. Row-1 load is at arm 2290. How much must be removed from row 1 to bring the CG onto the sloping forward limit?`,
-        preset: { weight: w, iu, fixType: "remove", station: "row1", side: "fwd" } };
-    },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "remove",
+          station: "row1",
+          side: "fwd"
+        }
+      };
+    }
   },
   maxAuxFuel: {
     label: "Max aux fuel (CG-limited)",
     gen() {
-      const w = rand(2450, 2620, 10), cg = rand(2670, 2679);
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Max aux fuel (CG-limited)",
+      const w = rand(2450, 2620, 10),
+        cg = rand(2670, 2679);
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Max aux fuel (CG-limited)",
         prompt: `An Echo has the main tanks full, aux tanks empty. Gross weight ${w} kg, moment ${iu} IU. Greatest fuel that may be loaded into the aux tanks (arm 2800)?`,
-        preset: { weight: w, iu, fixType: "maxfuel", station: "auxTank", side: "aft" } };
-    },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "maxfuel",
+          station: "auxTank",
+          side: "aft"
+        }
+      };
+    }
   },
   inLimits: {
     label: "Limit check (in / out)",
     gen() {
-      const w = rand(2400, 2600, 10), cg = rand(2440, 2700);
-      const iu = Math.round((cg * w) / 10000);
-      return { type: "Limit check",
+      const w = rand(2400, 2600, 10),
+        cg = rand(2440, 2700);
+      const iu = Math.round(cg * w / 10000);
+      return {
+        type: "Limit check",
         prompt: `An Echo is loaded to ${w} kg, moment ${iu} IU. Is the CG within limits?`,
-        preset: { weight: w, iu, fixType: "none", station: "fwd", side: "auto" } };
-    },
-  },
+        preset: {
+          weight: w,
+          iu,
+          fixType: "none",
+          station: "fwd",
+          side: "auto"
+        }
+      };
+    }
+  }
 };
-
 const VARIANT_ORDER = ["addAft", "removeAft", "fwdAdd", "fwdRemove", "maxAuxFuel", "inLimits"];
-
 function generateQuestion(key = "all") {
   const chosen = key === "all" ? pick(VARIANT_ORDER) : key;
   return (VARIANTS[chosen] || VARIANTS.addAft).gen();
 }
-
 const CSS = `
 .eh-root{
   --bg:#0a1526; --panel:#0f1d33; --panel2:#152741; --line:#243c5c;
@@ -856,10 +1285,13 @@ const CSS = `
 .eh-disclaimer{margin-top:16px;color:var(--dim);font-size:11.5px;line-height:1.5;font-family:var(--mono)}
 @media (max-width:560px){.eh-inputs{grid-template-columns:1fr}.eh-refgrid{grid-template-columns:1fr}.eh-head h1{font-size:19px}}
 `;
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(EchoLoadingHelper));
 
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<EchoLoadingHelper />);
+} catch (e) {
+  document.getElementById('root').innerHTML =
+    '<div id="boot">Error: ' + (e && e.message ? e.message : e) + '</div>';
+  console.error(e);
+}
 </script>
 </body>
 </html>
