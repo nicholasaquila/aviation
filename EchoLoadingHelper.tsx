@@ -1,29 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Echo Loading Helper · Learn To Fly Melbourne</title>
-<link rel="preconnect" href="https://unpkg.com" />
-<style>
-  html,body{margin:0;padding:0;background:#0a1526;}
-  #root{min-height:100vh;}
-  /* tiny loading state before React mounts */
-  #boot{color:#8ba6c8;font-family:ui-monospace,Menlo,Consolas,monospace;
-        text-align:center;padding:60px 20px;font-size:13px;}
-</style>
-</head>
-<body>
-<div id="root"><div id="boot">Loading Echo Loading Helper…</div></div>
-
-<!-- React + ReactDOM + Babel (in-browser JSX compile) -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-<script type="text/babel" data-presets="react">
-const { useState, useMemo } = React;
-
+import React, { useState, useMemo } from "react";
 
 /* ──────────────────────────────────────────────────────────────────────────
    ECHO LOADING HELPER  ·  Learn To Fly Melbourne
@@ -453,7 +428,7 @@ function IndexGraph({ plot, cg0, w0 }) {
 }
 
 /* ── UI ─────────────────────────────────────────────────────────────────── */
-function EchoLoadingHelper() {
+export default function EchoLoadingHelper() {
   const [tab, setTab] = useState("solve");
   const [weight, setWeight] = useState("");
   const [iu, setIU] = useState("");
@@ -856,10 +831,3 @@ const CSS = `
 .eh-disclaimer{margin-top:16px;color:var(--dim);font-size:11.5px;line-height:1.5;font-family:var(--mono)}
 @media (max-width:560px){.eh-inputs{grid-template-columns:1fr}.eh-refgrid{grid-template-columns:1fr}.eh-head h1{font-size:19px}}
 `;
-
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<EchoLoadingHelper />);
-</script>
-</body>
-</html>
