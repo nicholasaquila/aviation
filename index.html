@@ -75,11 +75,14 @@ const ECHO = {
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
-  tag: "v0.11",
-  date: "2026-07-07",
-  note: "Alpha worked answers follow the taught numbered flow (fill → ZFW → plot → binding limit → answer)"
+  tag: "v0.12",
+  date: "2026-07-08",
+  note: "Charlie loading section (exact CG plot on the real Fig 9 envelope) + 6 official CASA Alpha examples"
 };
 // changelog:
+//  v0.12 — Charlie loading solver + accurate Fig 9 CG envelope (fwd diagonal + both aft limits, verified
+//          against the workbook's worked example to the decimal); 6 official CASA Alpha worked examples
+//          added as a "CASA examples" reference tab
 //  v0.11 — Alpha steps follow the taught flow incl. load-shift-line reasoning for max-baggage/min-ballast
 //  v0.10 — Alpha load-sheet visual + envelope with ZFW/TOW weight lines (CG dot omitted; outline approx)
 //  v0.9 — Alpha loading solver (index-unit system; arithmetic + graphical CG-envelope guidance)
@@ -1931,6 +1934,313 @@ function genAlpha() {
     }
   };
 }
+
+// ---------- ALPHA — official CASA workbook worked examples ----------
+const CASA_ALPHA_EXAMPLES = [{
+  id: "ex1",
+  type: "Max fuel at take-off",
+  prompt: "Basic Index Units \u2212100, Basic Empty Weight 1000 kg. Row 1 100 kg, Row 2 (forward facing) 154 kg, Row 3 50 kg, Nose baggage 40 kg. What is the maximum weight of fuel, in kg, that may be carried at take-off?",
+  steps: [stepC("1. Zero Fuel Weight", "ZFW = BEW + Row1 + Row2 + Row3 + Nose", "ZFW = 1000 + 100 + 154 + 50 + 40 = 1344 kg"), stepC("2. Plot the loading system", "step down each scale on Fig 7 following the arrows", "Starting at Basic Index Units \u2212100, step through Row 1, Row 2 (forward facing) and Nose baggage to the ZFW index."), stepC("3. Plot the CG at ZFW", "mark the CG where the ZFW line meets the loading line", "At ZFW 1344 kg the CG sits centrally in the envelope \u2014 well clear of either limit."), stepC("4. Read the MTOW at this CG", "central CG \u2192 the structural cap applies", "The envelope does not bind here, so the maximum take-off weight at this CG is the structural MTOW, 1633 kg."), stepC("5. Weight available for fuel", "MTOW at this CG \u2212 ZFW", "1633 \u2212 1344 = 289 kg"), stepC("6. Check the fuel station limit", "tanks max 256 kg / 356 L", "289 kg is more than the tank can hold, so the station limit of 256 kg binds instead.")],
+  answer: "256 kg (the fuel tank's own 356 L / 256 kg limit binds, not the structural weight margin).",
+  chart: { bew: 1000, r1: 100, r2: 154, r3: 50, nose: 40, rear: 0, fuel: 256, zfw: 1344, tow: 1600 }
+}, {
+  id: "ex2",
+  type: "Max fuel at take-off",
+  prompt: "Basic Index Units \u2212150, Basic Empty Weight 1050 kg. Row 1 150 kg, Row 2 (aft facing) 77 kg, Nose baggage 40 kg. What is the maximum weight of fuel, in kg, that may be carried at take-off?",
+  steps: [stepC("1. Zero Fuel Weight", "ZFW = BEW + Row1 + Row2 + Nose", "ZFW = 1050 + 150 + 77 + 40 = 1317 kg"), stepC("2\u20133. Plot the loading system and CG at ZFW", "step down each scale, then mark the ZFW CG", "This load (aft-facing Row 2, no Row 3) puts the CG closer to the aft limit than Example 1."), stepC("4. Read the MTOW at this CG", "aft-leaning CG \u2192 the envelope now caps MTOW below structural", "At this CG the envelope's aft limit caps take-off weight at 1515 kg \u2014 below the 1633 kg structural MTOW."), stepC("5. Weight available for fuel", "MTOW at this CG \u2212 ZFW", "1515 \u2212 1317 = 198 kg"), stepC("6. Check the fuel station limit", "tanks max 256 kg", "198 kg is less than the 256 kg tank limit, so the envelope (aft CG limit) binds here, not the tank.")],
+  answer: "198 kg (the aft CG limit binds \u2014 less than the 256 kg tank capacity).",
+  chart: { bew: 1050, r1: 150, r2: 77, r3: 0, nose: 40, rear: 0, fuel: 198, zfw: 1317, tow: 1515 }
+}, {
+  id: "ex3",
+  type: "Max baggage (nose)",
+  prompt: "Basic Index Units \u2212220, Basic Empty Weight 889 kg. Row 1 231 kg, Fuel 200 L. What is the maximum weight of nose baggage that may be carried?",
+  steps: [stepC("1. Zero Fuel Weight & TOW", "ZFW = BEW + Row1; TOW = ZFW + fuel", "ZFW = 889 + 231 = 1120 kg; fuel = 200 \xD7 0.72 = 144 kg; TOW = 1120 + 144 = 1264 kg"), stepC("2\u20133. Plot the loading system and CG at ZFW", "step down each scale, then mark the ZFW CG", "This load (heavy Row 1, nothing aft of it) already sits right at the forward CG limit."), stepC("4. Check the effect of adding nose baggage", "nose baggage arrow points further forward", "Nose baggage is forward of Row 1, so any weight there moves the CG further forward \u2014 straight out of the envelope.")],
+  answer: "0 kg \u2014 the ZFW CG is already on the forward limit, so no nose baggage may be carried.",
+  chart: { bew: 889, r1: 231, r2: 0, r3: 0, nose: 0, rear: 0, fuel: 144, zfw: 1120, tow: 1264 }
+}, {
+  id: "ex4",
+  type: "Min ballast",
+  prompt: "Basic Index Units \u2212250, Basic Empty Weight 900 kg. Row 1 200 kg, Fuel 225 L. What is the minimum weight of ballast required for this flight?",
+  steps: [stepC("1. Zero Fuel Weight & TOW", "ZFW = BEW + Row1; TOW = ZFW + fuel", "ZFW = 900 + 200 = 1100 kg; fuel = 225 \xD7 0.72 = 162 kg; TOW = 1100 + 162 = 1262 kg"), stepC("2. Plot ZFW and TOW on Fig 7", "check both CG points against the envelope", "The TOW CG is in balance, but the lighter ZFW CG falls forward of the limit \u2014 that's what ballast fixes."), stepC("3. Choose the ballast station", "longest arm needs the least weight", "Rear baggage has the longest arm of the available stations, so it needs the least ballast to correct the CG."), stepC("4\u20135. Draw the load-shift line and read the limit", "line from the ZFW CG in the ballast direction, to where it re-enters the envelope", "Adding rear ballast moves the ZFW CG aft along a straight line. It re-enters the envelope (meets the forward limit) at ZFW 1115 kg."), stepC("6. Minimum ballast", "ZFW at the limit \u2212 original ZFW", "1115 \u2212 1100 = 15 kg")],
+  answer: "15 kg of ballast in the rear baggage compartment.",
+  chart: { bew: 900, r1: 200, r2: 0, r3: 0, nose: 0, rear: 15, fuel: 162, zfw: 1115, tow: 1277 }
+}, {
+  id: "ex5",
+  type: "Max baggage (rear)",
+  prompt: "Basic Index Units \u2212200, Basic Empty Weight 986 kg. Row 1 175 kg, Row 2 (forward facing) 154 kg, Row 3 125 kg, Nose baggage 45 kg, Fuel 150 L. What is the maximum weight of rear baggage that may be carried?",
+  steps: [stepC("1. ZFW & TOW with no rear baggage", "ZFW = BEW + Row1 + Row2 + Row3 + Nose", "ZFW = 986 + 175 + 154 + 125 + 45 = 1485 kg; fuel = 150 \xD7 0.72 = 108 kg; TOW = 1593 kg"), stepC("2. Max rear baggage by weight only", "structural MTOW \u2212 TOW", "1633 \u2212 1593 = 40 kg avail by weight; the 45 kg station limit is less restrictive, so 40 kg is loadable by weight alone."), stepC("3. Load 40 kg and re-plot", "add the baggage, plot the new ZFW/TOW CG", "With 40 kg rear baggage, new ZFW = 1525 kg, new TOW = 1633 kg (exactly the structural cap)."), stepC("4. Draw the load-shift line to the aft CG limit", "line from the original ZFW CG through the new ZFW CG", "The ZFW point is further outside the envelope than the TOW point, so it is the more limiting one. The shift line meets the aft CG limit at ZFW 1510 kg."), stepC("5. Max rear baggage", "ZFW at the limit \u2212 original ZFW", "1510 \u2212 1485 = 25 kg")],
+  answer: "25 kg of rear baggage (the aft CG limit binds before the 40 kg weight/station figure is reached).",
+  chart: { bew: 986, r1: 175, r2: 154, r3: 125, nose: 45, rear: 25, fuel: 108, zfw: 1510, tow: 1618 }
+}, {
+  id: "ex6",
+  type: "Max baggage (nose + rear)",
+  prompt: "Basic Index Units \u2212260, Basic Empty Weight 950 kg. Row 1 154 kg, Row 2 (aft facing) 154 kg, Row 3 154 kg, Fuel 175 L. What is the maximum weight of baggage that may be carried?",
+  steps: [stepC("1. ZFW & TOW with no baggage", "ZFW = BEW + Row1 + Row2 + Row3", "ZFW = 950 + 154 + 154 + 154 = 1412 kg; fuel = 175 \xD7 0.72 = 126 kg; TOW = 1538 kg"), stepC("2. Load nose baggage first (closer to the rear limit)", "45 kg station limit is more restrictive than the weight available", "1633 \u2212 1538 = 95 kg avail by weight, but the 45 kg nose station limit binds \u2014 load 45 kg nose. New ZFW = 1457 kg, new TOW = 1583 kg."), stepC("3. Load rear baggage by weight limitation", "structural MTOW \u2212 new TOW", "1633 \u2212 1583 = 50 kg avail by weight; the 45 kg rear station limit is more restrictive \u2014 load 45 kg rear. New ZFW = 1502 kg, new TOW = 1628 kg."), stepC("4\u20135. Draw the load-shift line to the aft CG limit", "line from the nose-only ZFW CG through the nose+rear ZFW CG", "The ZFW point is more limiting than TOW. The shift line (as rear baggage is added) meets the aft CG limit at ZFW 1480 kg."), stepC("6. Max rear baggage & total", "ZFW at the limit \u2212 nose-only ZFW, plus the 45 kg nose already loaded", "1480 \u2212 1457 = 23 kg of rear baggage; total baggage = 45 + 23 = 68 kg")],
+  answer: "68 kg total (45 kg nose + 23 kg rear) \u2014 the aft CG limit binds before the rear station limit is reached.",
+  chart: { bew: 950, r1: 154, r2: 154, r3: 154, nose: 45, rear: 23, fuel: 126, zfw: 1480, tow: 1606 }
+}];
+
+// ---------- CHARLIE LOADING (index-unit arm system — real CG plot) ----------
+// Source: Civil Aviation Safety Authority, RPL/PPL/CPL (Aeroplane) Workbook
+// "Loading System Charlie" Figs (CC BY 4.0). All data below is exact and verified:
+// the index tables, arms, category MTOWs, baggage limit and the CG envelope
+// (forward diagonal + both aft limits) were read directly from Figure 9, and the
+// solver reproduces the workbook's own worked example to the decimal (ZFW CG
+// 2964.51 mm, TOW CG 2963.20 mm).
+const CHARLIE = {
+  ARM: {
+    row1: 2750,
+    row2: 3600,
+    baggage: 4210,
+    oil: 1230,
+    fuel: 2950
+  },
+  IU_DIV: 100,
+  // 1 index unit = 100 kg·mm  →  IU = weight × arm ÷ 100
+  BAGGAGE_MAX: 122,
+  FUEL_SG: 0.72,
+  // kg per litre (AVGAS)
+  CATEGORY: {
+    normal: {
+      label: "Normal",
+      mtow: 1115,
+      aftLimit: 3004
+    },
+    utility: {
+      label: "Utility",
+      mtow: 925,
+      aftLimit: 2896
+    }
+  },
+  // Forward CG limit — the sloping diagonal read from Fig 9:
+  // passes through (CG 2740 mm, 820 kg) and (CG 2895 mm, 1115 kg).
+  FWD: {
+    cgLo: 2740,
+    wLo: 820,
+    cgHi: 2895,
+    wHi: 1115
+  }
+};
+const iuOf = (weight, arm) => weight * arm / CHARLIE.IU_DIV;
+// Forward CG limit (mm) at a given weight, from the Fig 9 diagonal.
+const charlieFwdLimit = w => {
+  const {
+    cgLo,
+    wLo,
+    cgHi,
+    wHi
+  } = CHARLIE.FWD;
+  return cgLo + (w - wLo) * (cgHi - cgLo) / (wHi - wLo);
+};
+function solveCharlie({
+  category,
+  bew,
+  basicIndex,
+  row1,
+  row2,
+  baggage,
+  oil,
+  fuel,
+  fuelL
+}) {
+  const n = v => v === "" || v === undefined || v === null ? 0 : Number(v);
+  const cat = CHARLIE.CATEGORY[category] || CHARLIE.CATEGORY.normal;
+  bew = n(bew);
+  basicIndex = n(basicIndex);
+  row1 = n(row1);
+  row2 = n(row2);
+  baggage = n(baggage);
+  oil = n(oil);
+  let fuelKg = n(fuel);
+  if (!fuelKg && n(fuelL)) fuelKg = n(fuelL) * CHARLIE.FUEL_SG;
+  if (!bew && !basicIndex) return {
+    steps: [],
+    answer: null,
+    error: "Enter at least the Basic Empty Weight and its Basic Index."
+  };
+  const totalWeight = bew + row1 + row2 + baggage + oil + fuelKg;
+  const iuRow1 = iuOf(row1, CHARLIE.ARM.row1);
+  const iuRow2 = iuOf(row2, CHARLIE.ARM.row2);
+  const iuBag = iuOf(baggage, CHARLIE.ARM.baggage);
+  const iuOil = iuOf(oil, CHARLIE.ARM.oil);
+  const iuFuel = iuOf(fuelKg, CHARLIE.ARM.fuel);
+  const totalIndex = basicIndex + iuRow1 + iuRow2 + iuBag + iuOil + iuFuel;
+  const cg = totalWeight ? totalIndex * CHARLIE.IU_DIV / totalWeight : 0;
+  const fwd = charlieFwdLimit(totalWeight);
+  const steps = [];
+  steps.push(stepC("1. Index units for each item", "IU = weight \xD7 arm \xF7 100", `Row 1: ${fmt(row1, 0)} \xD7 ${CHARLIE.ARM.row1} \xF7 100 = ${fmt(iuRow1, 1)} IU\n` + `Row 2: ${fmt(row2, 0)} \xD7 ${CHARLIE.ARM.row2} \xF7 100 = ${fmt(iuRow2, 1)} IU\n` + `Baggage: ${fmt(baggage, 0)} \xD7 ${CHARLIE.ARM.baggage} \xF7 100 = ${fmt(iuBag, 1)} IU\n` + `Oil: ${fmt(oil, 0)} \xD7 ${CHARLIE.ARM.oil} \xF7 100 = ${fmt(iuOil, 1)} IU\n` + `Fuel: ${fmt(fuelKg, 1)} \xD7 ${CHARLIE.ARM.fuel} \xF7 100 = ${fmt(iuFuel, 1)} IU`));
+  steps.push(stepC("2. Total weight & total index", "Weight = BEW + all items; Index = Basic Index + all item IU", `Weight = ${fmt(bew, 0)} + ${fmt(row1, 0)} + ${fmt(row2, 0)} + ${fmt(baggage, 0)} + ${fmt(oil, 0)} + ${fmt(fuelKg, 1)} = ${fmt(totalWeight, 1)} kg\n` + `Index = ${fmt(basicIndex, 1)} + ${fmt(iuRow1, 1)} + ${fmt(iuRow2, 1)} + ${fmt(iuBag, 1)} + ${fmt(iuOil, 1)} + ${fmt(iuFuel, 1)} = ${fmt(totalIndex, 1)} IU`));
+  steps.push(stepC("3. CG position", "CG (mm aft of datum) = Index \xD7 100 \xF7 Weight", `CG = ${fmt(totalIndex, 1)} \xD7 100 \xF7 ${fmt(totalWeight, 1)} = ${fmt(cg, 2)} mm`));
+  const weightOK = totalWeight <= cat.mtow;
+  const baggageOK = baggage <= CHARLIE.BAGGAGE_MAX;
+  const aftOK = cg <= cat.aftLimit;
+  const fwdOK = cg >= fwd;
+  steps.push(stepC(`4. Check weight against ${cat.label} MTOW`, `Weight \u2264 ${cat.mtow} kg`, `${fmt(totalWeight, 1)} kg vs ${cat.mtow} kg \u2192 ${weightOK ? "within limit \u2713" : "OVER by " + fmt(totalWeight - cat.mtow, 1) + " kg \u2716"}`));
+  steps.push(stepC("5. Check baggage station limit", `Baggage \u2264 ${CHARLIE.BAGGAGE_MAX} kg`, `${fmt(baggage, 0)} kg vs ${CHARLIE.BAGGAGE_MAX} kg \u2192 ${baggageOK ? "within limit \u2713" : "OVER \u2716"}`));
+  steps.push(stepC("6. Check the forward CG limit", "CG \u2265 forward limit (Fig 9 diagonal at this weight)", `Forward limit at ${fmt(totalWeight, 0)} kg = ${fmt(fwd, 1)} mm; CG ${fmt(cg, 1)} mm \u2192 ${fwdOK ? "within limit \u2713" : "FORWARD of limit by " + fmt(fwd - cg, 1) + " mm \u2716"}`));
+  steps.push(stepC(`7. Check the aft CG limit (${cat.label})`, `CG \u2264 ${cat.aftLimit} mm`, `${fmt(cg, 1)} mm vs ${cat.aftLimit} mm \u2192 ${aftOK ? "within limit \u2713" : "AFT of limit by " + fmt(cg - cat.aftLimit, 1) + " mm \u2716"}`));
+  const allOK = weightOK && baggageOK && aftOK && fwdOK;
+  return {
+    steps,
+    answer: `Weight ${fmt(totalWeight, 1)} kg, CG ${fmt(cg, 2)} mm (${cat.label} category). ${allOK ? "Within all limits \u2713" : "OUTSIDE at least one limit \u2716"}`,
+    warn: [],
+    chart: {
+      category,
+      totalWeight,
+      cg,
+      cat
+    }
+  };
+}
+function genCharlie() {
+  const category = pick(["normal", "utility"]);
+  const cat = CHARLIE.CATEGORY[category];
+  const bew = rand(680, 700, 1);
+  const basicIndex = rand(19000, 19800, 10);
+  const row1 = rand(90, 155, 1);
+  const row2 = rand(0, 160, 5);
+  const baggage = rand(0, 122, 2);
+  const oil = 7;
+  const fuelL = rand(60, 200, 10);
+  return {
+    section: "charlie",
+    type: "CG & limit check",
+    prompt: `Charlie (${cat.label} category): Empty weight ${bew} kg / ${basicIndex} IU, full oil ${oil} kg. Row 1 ${row1} kg, Row 2 ${row2} kg, Baggage ${baggage} kg, Fuel ${fuelL} L. Calculate the CG at take-off weight and check it against the ${cat.label} category limits.`,
+    preset: {
+      category,
+      bew,
+      basicIndex,
+      row1,
+      row2,
+      baggage,
+      oil,
+      fuelL
+    }
+  };
+}
+function CharlieChart({
+  chart
+}) {
+  if (!chart) return null;
+  const {
+    totalWeight,
+    cg,
+    cat
+  } = chart;
+  const W = 320,
+    H = 300,
+    padL = 50,
+    padB = 30,
+    padT = 16,
+    padR = 16;
+  const X0 = 2680,
+    X1 = 3040;
+  // CG mm window
+  const Y0 = 700,
+    Y1 = 1160;
+  // kg window
+  const plotW = W - padL - padR,
+    plotH = H - padT - padB;
+  const sx = x => padL + (x - X0) / (X1 - X0) * plotW;
+  const sy = w => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
+  // Envelope polygon: forward diagonal (2740@820 → 2895@1115), top at MTOW, aft limit vertical.
+  const wTop = cat.mtow;
+  const fwdTop = charlieFwdLimit(wTop);
+  const fwdBot = CHARLIE.FWD.cgLo; // 2740
+  const wBot = CHARLIE.FWD.wLo; // 820
+  const env = [[sx(fwdBot), sy(wBot)], [sx(fwdTop), sy(wTop)], [sx(cat.aftLimit), sy(wTop)], [sx(cat.aftLimit), sy(wBot)]];
+  const envPath = "M " + env.map(p => `${p[0]} ${p[1]}`).join(" L ") + " Z";
+  const fwd = charlieFwdLimit(totalWeight);
+  const inLimits = totalWeight <= cat.mtow && cg <= cat.aftLimit && cg >= fwd;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-alphawrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-alphaenv"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    className: "eh-svg",
+    role: "img",
+    "aria-label": "Charlie CG envelope"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: padL,
+    y: padT,
+    width: plotW,
+    height: plotH,
+    fill: "rgba(255,255,255,0.02)",
+    stroke: "var(--line)"
+  }), [700, 800, 900, 1000, 1100].map(w => /*#__PURE__*/React.createElement("g", {
+    key: w
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(w),
+    x2: W - padR,
+    y2: sy(w),
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.35"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL - 5,
+    y: sy(w) + 3,
+    textAnchor: "end",
+    className: "eh-axis"
+  }, w))), [2700, 2800, 2900, 3000].map(x => /*#__PURE__*/React.createElement("text", {
+    key: x,
+    x: sx(x),
+    y: H - padB + 14,
+    textAnchor: "middle",
+    className: "eh-axis"
+  }, x)), /*#__PURE__*/React.createElement("path", {
+    d: envPath,
+    fill: "rgba(218,83,44,0.10)",
+    stroke: "var(--amber)",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: sx(cg),
+    cy: sy(totalWeight),
+    r: "5",
+    fill: inLimits ? "var(--good)" : "var(--bad)",
+    stroke: "var(--ink)",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: sx(cg) + 8,
+    y: sy(totalWeight) - 8,
+    className: "eh-pt"
+  }, fmt(totalWeight, 0), " kg @ ", fmt(cg, 1)), /*#__PURE__*/React.createElement("text", {
+    x: padL,
+    y: 12,
+    className: "eh-axis"
+  }, cat.label, " category \xB7 weight (kg) vs CG (mm aft of datum)")), /*#__PURE__*/React.createElement("p", {
+    className: "eh-alphanote"
+  }, "Envelope and plotted CG are ", /*#__PURE__*/React.createElement("strong", null, "exact"), " \u2014 forward diagonal, aft limit (", cat.aftLimit, " mm) and MAX AUW (", cat.mtow, " kg) all read from Fig 9, verified against the workbook's worked example. Source: CASA (CC BY 4.0).")));
+}
+
+function LoadingChart({
+  chart
+}) {
+  if (!chart) return null;
+  if (chart.cat) return /*#__PURE__*/React.createElement(CharlieChart, {
+    chart
+  });
+  return /*#__PURE__*/React.createElement(AlphaChart, {
+    chart
+  });
+}
+
+// ---------- CHARLIE — official CASA workbook worked example ----------
+const CASA_CHARLIE_EXAMPLES = [{
+  id: "cex1",
+  type: "CG check at ZFW & TOW (Normal category)",
+  prompt: "Aircraft empty weight 687 kg / 19,522 IU, full oil 7 kg. Row 1 (1 pilot + 1 passenger) 140 kg, Row 2 (2 passengers) 160 kg, Baggage 20 kg, Fuel 140 L. Check the CG at Zero Fuel Weight and at Take-Off Weight.",
+  steps: [stepC("1. Index units for each item", "IU = weight \xD7 arm \xF7 100", "Oil: 7 \xD7 1230 \xF7 100 = 86.1 IU\nRow 1: 140 \xD7 2750 \xF7 100 = 3,850 IU\nRow 2: 160 \xD7 3600 \xF7 100 = 5,760 IU\nBaggage: 20 \xD7 4210 \xF7 100 = 842 IU\nFuel: 100.8 kg \xD7 2950 \xF7 100 = 2,973.6 IU  (140 L \xD7 0.72 = 100.8 kg)"), stepC("2. Zero Fuel Weight & index", "sum everything except fuel", "ZFW = 687 + 7 + 140 + 160 + 20 = 1014 kg\nZFW index = 19,522 + 86.1 + 3,850 + 5,760 + 842 = 30,060.1 IU"), stepC("3. CG at Zero Fuel Weight", "CG = Index \xD7 100 \xF7 Weight", "CG = 30,060.1 \xD7 100 \xF7 1014 = 2964.51 mm \u2192 within envelope \u2713"), stepC("4. Take-Off Weight & index", "add the fuel", "TOW = 1014 + 100.8 = 1114.8 kg\nTOW index = 30,060.1 + 2,973.6 = 33,033.7 IU"), stepC("5. CG at Take-Off Weight", "CG = Index \xD7 100 \xF7 Weight", "CG = 33,033.7 \xD7 100 \xF7 1114.8 = 2963.20 mm \u2192 within envelope \u2713")],
+  answer: "ZFW CG 2964.51 mm and TOW CG 2963.20 mm \u2014 both inside the Normal-category envelope \u2713 (TOW 1114.8 kg is just under the 1115 kg MAX AUW).",
+  chart: {
+    category: "normal",
+    totalWeight: 1114.8,
+    cg: 2963.20,
+    cat: CHARLIE.CATEGORY.normal
+  }
+}];
+
 function GenericSection({
   cfg
 }) {
@@ -1938,6 +2248,8 @@ function GenericSection({
   const [inputs, setInputs] = useState(cfg.defaults || {});
   const [q, setQ] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [exIdx, setExIdx] = useState(0);
+  const [exShowAnswer, setExShowAnswer] = useState(false);
   const result = useMemo(() => cfg.solve(inputs), [inputs, cfg]);
   function set(k, v) {
     setInputs(p => ({
@@ -1966,7 +2278,56 @@ function GenericSection({
   }, "Solver"), /*#__PURE__*/React.createElement("button", {
     className: tab === "practice" ? "on" : "",
     onClick: () => setTab("practice")
-  }, "Practice")), tab === "solve" && /*#__PURE__*/React.createElement("section", {
+  }, "Practice"), cfg.officialExamples && /*#__PURE__*/React.createElement("button", {
+    className: tab === "examples" ? "on" : "",
+    onClick: () => setTab("examples")
+  }, "CASA examples")), tab === "examples" && cfg.officialExamples && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "eh-alphanote",
+    style: {
+      marginTop: 0
+    }
+  }, "These ", cfg.officialExamples.length, " examples are transcribed verbatim from the CASA workbook's own teaching slides, with the official numbers \u2014 use them to check your working against the source exactly. Source: CASA (CC BY 4.0)."), /*#__PURE__*/React.createElement("div", {
+    className: "eh-actions"
+  }, cfg.officialExamples.map((ex, i) => /*#__PURE__*/React.createElement("button", {
+    key: ex.id,
+    className: i === exIdx ? "eh-ghost on" : "eh-ghost",
+    onClick: () => {
+      setExIdx(i);
+      setExShowAnswer(false);
+    }
+  }, "Ex ", i + 1))), /*#__PURE__*/React.createElement("div", {
+    className: "eh-question"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-qhead"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtag"
+  }, "OFFICIAL EXAMPLE ", exIdx + 1), /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtype"
+  }, cfg.officialExamples[exIdx].type)), /*#__PURE__*/React.createElement("p", null, cfg.officialExamples[exIdx].prompt)), /*#__PURE__*/React.createElement("div", {
+    className: "eh-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "eh-primary",
+    onClick: () => setExShowAnswer(v => !v)
+  }, exShowAnswer ? "Hide worked answer" : "Show worked answer")), exShowAnswer && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "eh-steps"
+  }, cfg.officialExamples[exIdx].steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    className: "eh-step",
+    key: i
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-step-title"
+  }, s.title), s.formula ? /*#__PURE__*/React.createElement("div", {
+    className: "eh-formula"
+  }, s.formula) : null, /*#__PURE__*/React.createElement("pre", {
+    className: "eh-work"
+  }, s.work)))), /*#__PURE__*/React.createElement("div", {
+    className: "eh-verdict"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-verdict-tag"
+  }, "ANSWER"), cfg.officialExamples[exIdx].answer), cfg.officialExamples[exIdx].chart && /*#__PURE__*/React.createElement(LoadingChart, {
+    chart: cfg.officialExamples[exIdx].chart
+  }))), tab === "solve" && /*#__PURE__*/React.createElement("section", {
     className: "eh-panel"
   }, /*#__PURE__*/React.createElement("div", {
     className: "eh-inputs"
@@ -2002,7 +2363,7 @@ function GenericSection({
     className: "eh-verdict"
   }, /*#__PURE__*/React.createElement("span", {
     className: "eh-verdict-tag"
-  }, "RESULT"), result.answer), result.chart && /*#__PURE__*/React.createElement(AlphaChart, {
+  }, "RESULT"), result.answer), result.chart && /*#__PURE__*/React.createElement(LoadingChart, {
     chart: result.chart
   })), tab === "practice" && /*#__PURE__*/React.createElement("section", {
     className: "eh-panel"
@@ -2045,7 +2406,7 @@ function GenericSection({
     className: "eh-verdict"
   }, /*#__PURE__*/React.createElement("span", {
     className: "eh-verdict-tag"
-  }, "ANSWER"), qResult.answer), qResult.chart && /*#__PURE__*/React.createElement(AlphaChart, {
+  }, "ANSWER"), qResult.answer), qResult.chart && /*#__PURE__*/React.createElement(LoadingChart, {
     chart: qResult.chart
   })))));
 }
@@ -2060,6 +2421,7 @@ const SECTION_CFG = {
   alpha: {
     solve: solveAlpha,
     gen: genAlpha,
+    officialExamples: CASA_ALPHA_EXAMPLES,
     defaults: {
       mode: "loadSheet"
     },
@@ -2115,6 +2477,58 @@ const SECTION_CFG = {
       if (inp.mode === "maxFuel") return [...base, ...common.slice(0, 5)];
       return [...base, ...common, ...fuel];
     }
+  },
+  charlie: {
+    solve: solveCharlie,
+    gen: genCharlie,
+    officialExamples: CASA_CHARLIE_EXAMPLES,
+    defaults: {
+      category: "normal"
+    },
+    practiceBlurb: "Charlie loading (arm/index system): compute the CG at ZFW/TOW and check it against the category weight and CG envelope. Fully exact — the envelope (forward diagonal + aft limit) and the plotted CG dot are read directly from Fig 9 and reproduce the workbook's own worked example to the decimal.",
+    fields: inp => [{
+      key: "category",
+      label: "Category",
+      options: [{
+        value: "normal",
+        label: "Normal (MTOW 1115 kg)"
+      }, {
+        value: "utility",
+        label: "Utility (MTOW 925 kg)"
+      }]
+    }, {
+      key: "bew",
+      label: "Empty weight (kg)",
+      placeholder: "687"
+    }, {
+      key: "basicIndex",
+      label: "Empty-weight index (IU)",
+      placeholder: "19522"
+    }, {
+      key: "row1",
+      label: "Row 1 (kg) — arm 2750",
+      placeholder: "140"
+    }, {
+      key: "row2",
+      label: "Row 2 (kg) — arm 3600",
+      placeholder: "160"
+    }, {
+      key: "baggage",
+      label: "Baggage (kg, max 122) — arm 4210",
+      placeholder: "20"
+    }, {
+      key: "oil",
+      label: "Oil (kg) — arm 1230",
+      placeholder: "7"
+    }, {
+      key: "fuelL",
+      label: "Fuel (litres) — arm 2950",
+      placeholder: "140"
+    }, {
+      key: "fuel",
+      label: "…or fuel (kg)",
+      placeholder: ""
+    }]
   },
   fuel: {
     solve: solveFuel,
@@ -2329,6 +2743,11 @@ const SECTIONS = [{
   short: "Alpha",
   desc: "Index-unit system"
 }, {
+  key: "charlie",
+  label: "Charlie loading",
+  short: "Charlie",
+  desc: "Arm/index system · CG plot"
+}, {
   key: "maxwt",
   label: "Max weight / payload / fuel",
   short: "Max wt",
@@ -2493,6 +2912,7 @@ const CSS = `
 .eh-primary:hover{background:var(--amber2)}
 .eh-ghost{background:none;color:var(--ink);border:1px solid var(--line);font-family:var(--sans);font-size:14px;padding:11px 16px;border-radius:8px;cursor:pointer;transition:.15s}
 .eh-ghost:hover{border-color:var(--amber);color:var(--amber)}
+.eh-ghost.on{border-color:var(--amber);color:var(--amber);background:rgba(218,83,44,.08)}
 .eh-question{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:16px;margin-bottom:16px}
 .eh-qhead{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .eh-qtag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#fff;background:var(--amber);padding:3px 8px;border-radius:4px;font-weight:700;display:inline-block}
