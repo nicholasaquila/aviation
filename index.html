@@ -75,11 +75,12 @@ const ECHO = {
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
-  tag: "v0.10",
+  tag: "v0.11",
   date: "2026-07-07",
-  note: "Alpha worked answers show load sheet + envelope (exact weights, no CG dot)"
+  note: "Alpha worked answers follow the taught numbered flow (fill → ZFW → plot → binding limit → answer)"
 };
 // changelog:
+//  v0.11 — Alpha steps follow the taught flow incl. load-shift-line reasoning for max-baggage/min-ballast
 //  v0.10 — Alpha load-sheet visual + envelope with ZFW/TOW weight lines (CG dot omitted; outline approx)
 //  v0.9 — Alpha loading solver (index-unit system; arithmetic + graphical CG-envelope guidance)
 //  v0.8 — expanded to all CFPA sections (W&B, max weight, fuel, PNR, ETP, climb) + sidebar layout
@@ -1755,15 +1756,16 @@ function solveAlpha({
   if (nose > ALPHA.NOSE_MAX) warn.push(`Nose baggage ${fmt(nose)} kg exceeds 45 kg max`);
   if (rear > ALPHA.REAR_MAX) warn.push(`Rear baggage ${fmt(rear)} kg exceeds 45 kg max`);
   if (mode === "maxFuel") {
-    // structural: MTOW - ZFW; station: fuel cap 256. Envelope CG-limited MTOW read off graph.
     const structAvail = ALPHA.MTOW - zfw;
     const capLimited = Math.min(structAvail, ALPHA.FUEL_MAX_KG);
-    steps.push(stepC("2. Weight available for fuel (structural)", "MTOW − ZFW", `1633 − ${fmt(zfw, 0)} = ${fmt(structAvail, 0)} kg`));
-    steps.push(stepC("3. Station limit", "Fuel tanks max 256 kg (356 L)", `smaller of (${fmt(structAvail, 0)}, 256) = ${fmt(capLimited, 0)} kg`));
-    steps.push(stepC("4. CG-envelope check (graphical)", "plot ZFW on Fig 7 — the CG-limited MTOW may be < 1633", `If the ZFW CG sits forward/aft such that the envelope caps MTOW below 1633, that lower figure binds instead. Read the MTOW at this CG off the envelope; if it is below ${fmt(zfw + capLimited, 0)} kg, fuel = (envelope MTOW − ZFW).`));
+    steps.push(stepC("2. Plot the loading system", "step down each load-item scale on Fig 7 following the arrows", `Start at the Basic Empty Weight index, then step through Row 1, Row 2, Row 3 and baggage to find the ZFW index.`));
+    steps.push(stepC("3. Plot the CG at ZFW", "draw the ZFW weight line and drop to the envelope", `Draw a horizontal line at ZFW ${fmt(zfw, 0)} kg and mark the CG where the loading line meets it.`));
+    steps.push(stepC("4. Read the MTOW at this CG", "at the ZFW CG, the envelope gives the max take-off weight", `At the plotted CG the envelope caps the take-off weight. If the CG is central the cap is the structural MTOW 1633 kg; if it is toward a limit the cap is lower — read it off Fig 7.`));
+    steps.push(stepC("5. Weight available for fuel", "MTOW (at this CG) − ZFW", `Using structural MTOW: 1633 − ${fmt(zfw, 0)} = ${fmt(structAvail, 0)} kg. If the envelope caps MTOW lower, use that figure instead.`));
+    steps.push(stepC("6. Check the fuel station limit", "fuel tanks max 256 kg (356 L)", `The maximum fuel is the SMALLER of the weight available (${fmt(structAvail, 0)} kg) and the tank limit (256 kg) = ${fmt(capLimited, 0)} kg.`));
     return {
       steps,
-      answer: `Max fuel = ${fmt(capLimited, 0)} kg (${fmt(capLimited / ALPHA.KG_L, 0)} L) by weight/station — confirm against the envelope CG limit.`,
+      answer: `Max fuel = ${fmt(capLimited, 0)} kg (${fmt(capLimited / ALPHA.KG_L, 0)} L) by weight/station — confirm the MTOW at your ZFW CG on Fig 7.`,
       warn,
       chart: {
         bew,
@@ -1779,17 +1781,18 @@ function solveAlpha({
     };
   }
   if (mode === "maxBaggage") {
-    // fuel given; TOW = ZFW + fuel; available baggage by weight = MTOW - TOW, capped by station 45 each
     const tow = zfw + fuel;
-    steps.push(stepC("2. Take-Off Weight (before extra baggage)", "TOW = ZFW + fuel", `TOW = ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
     const structAvail = ALPHA.MTOW - tow;
-    steps.push(stepC("3. Weight available (structural)", "MTOW − TOW", `1633 − ${fmt(tow, 0)} = ${fmt(structAvail, 0)} kg`));
     const stationMax = ALPHA.NOSE_MAX + ALPHA.REAR_MAX - nose - rear;
-    steps.push(stepC("4. Station capacity remaining", "nose(45) + rear(45) − already loaded", `= ${fmt(stationMax, 0)} kg of baggage space`));
-    steps.push(stepC("5. CG-envelope check (graphical)", "plot on Fig 7 — CG limit often binds before weight", `The maximum baggage is the SMALLEST of: structural (${fmt(structAvail, 0)}), station capacity (${fmt(stationMax, 0)}), and the amount that keeps the ZFW/TOW CG inside the envelope (read off Fig 7). In many questions the envelope CG limit is the binding one.`));
+    steps.push(stepC("2. Calculate ZFW & TOW with no extra baggage", "TOW = ZFW + fuel", `ZFW ${fmt(zfw, 0)} kg; TOW = ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg. Plot both CG points on Fig 7.`));
+    steps.push(stepC("3. Max baggage by weight only", "MTOW − TOW (at this CG)", `1633 − ${fmt(tow, 0)} = ${fmt(structAvail, 0)} kg (use the envelope MTOW if the CG caps it lower).`));
+    steps.push(stepC("4. Check the station limit", "nose 45 kg + rear 45 kg, less what is already loaded", `Station space remaining = ${fmt(stationMax, 0)} kg. The more limiting of weight vs station applies at this stage.`));
+    steps.push(stepC("5. Load the baggage and re-plot", "add the baggage, plot the new ZFW and TOW CG points", `Loading baggage moves the CG. Plot the new ZFW and TOW positions on the envelope.`));
+    steps.push(stepC("6. Draw the load-shift line to the CG limit", "line from the no-baggage CG toward the baggage arrow", `Draw a straight line from the original ZFW CG through the new ZFW CG (the direction the CG moves as baggage is added). Where this line meets the nearest CG limit gives the maximum ZFW for this loading.`));
+    steps.push(stepC("7. Max baggage = ΔZFW to the limit", "max ZFW − original ZFW", `Read the ZFW at the point the shift line reaches the CG limit; subtract the original ZFW. The answer is the SMALLEST of this CG-limited figure, the weight limit (${fmt(structAvail, 0)} kg) and the station limit (${fmt(stationMax, 0)} kg).`));
     return {
       steps,
-      answer: `Baggage limited to ≤ ${fmt(Math.min(structAvail, stationMax), 0)} kg by weight/station — the envelope CG limit may reduce this further.`,
+      answer: `Baggage ≤ ${fmt(Math.min(structAvail, stationMax), 0)} kg by weight/station — the CG-limit shift line on Fig 7 may reduce this further.`,
       warn,
       chart: {
         bew,
@@ -1806,12 +1809,14 @@ function solveAlpha({
   }
   if (mode === "minBallast") {
     const tow = zfw + fuel;
-    steps.push(stepC("2. Take-Off Weight", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
-    steps.push(stepC("3. Plot ZFW and TOW on Fig 7 (graphical)", "check both CG points are inside the envelope", `Draw horizontal lines at ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg; step down the load-item scales to find the CG. If a point is forward of the fwd limit, ballast is needed aft.`));
-    steps.push(stepC("4. Minimum ballast (graphical)", "add ballast in the station with the LONGEST arm (rear baggage) — least weight moves CG most", `Rear baggage has the longest arm, so it needs the least ballast to bring the CG onto the limit. Draw the load-shift line from the current ZFW CG toward the rear-baggage arrow and read where it re-enters the envelope; ballast = (that ZFW) − (current ZFW).`));
+    steps.push(stepC("2. Calculate TOW", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
+    steps.push(stepC("3. Plot ZFW and TOW on Fig 7", "check both CG points against the envelope", `Draw horizontal lines at ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg and mark the CG on each. Often the TOW CG is in balance but the ZFW CG falls forward of the limit — that is what ballast fixes.`));
+    steps.push(stepC("4. Choose the ballast station (longest arm)", "rear compartment moves the CG most per kg", `Ballast in the compartment with the longest arm (rear baggage) shifts the CG the furthest for the least weight, so it needs the minimum ballast.`));
+    steps.push(stepC("5. Draw the load-shift line to the forward CG limit", "line from current ZFW CG toward the rear-baggage arrow", `Draw a straight line from the current ZFW CG in the direction the CG moves as rear ballast is added. Where this line first re-enters the envelope (meets the forward CG limit) gives the ZFW at which enough ballast is aboard.`));
+    steps.push(stepC("6. Min ballast = ΔZFW", "max-in-balance ZFW − original ZFW", `Read the ZFW where the shift line meets the forward limit and subtract the original ZFW. That difference is the minimum ballast.`));
     return {
       steps,
-      answer: `Ballast required = read off the envelope (rear compartment, longest arm = minimum ballast). Enter values in the workbook Fig 7 to get the exact kg.`,
+      answer: `Minimum ballast = (ZFW where the shift line meets the forward limit) − original ZFW; load it in the rear compartment (longest arm). Read the exact kg off Fig 7.`,
       warn,
       chart: {
         bew,
@@ -1827,11 +1832,11 @@ function solveAlpha({
     };
   }
 
-  // just a load sheet / limit check
+  // load sheet / limit check
   const tow = zfw + fuel;
-  steps.push(stepC("2. Fuel", "kg = L × 0.72 (max 256 kg / 356 L)", fuel ? `Fuel = ${fmt(fuel, 0)} kg${n(fuelL) ? " (" + fmt(n(fuelL)) + " L)" : ""}` : "No fuel entered"));
-  steps.push(stepC("3. Take-Off Weight", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
-  steps.push(stepC("4. Checks", "MTOW 1633 · nose 45 · rear 45 · plot CG on Fig 7", `TOW vs MTOW 1633 → ${tow <= ALPHA.MTOW ? "OK ✓" : "❌ OVER by " + fmt(tow - ALPHA.MTOW, 0) + " kg"}\n` + `Then plot ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg on the Fig 7 envelope — both must sit inside the shaded area.`));
+  steps.push(stepC("2. Fill in fuel", "kg = L × 0.72 (max 256 kg / 356 L)", fuel ? `Fuel = ${fmt(fuel, 0)} kg${n(fuelL) ? " (" + fmt(n(fuelL)) + " L)" : ""}` : "No fuel entered"));
+  steps.push(stepC("3. Total to Take-Off Weight", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
+  steps.push(stepC("4. Plot ZFW and TOW on Fig 7", "both CG points must sit inside the envelope", `TOW vs MTOW 1633 → ${tow <= ALPHA.MTOW ? "OK ✓" : "❌ OVER by " + fmt(tow - ALPHA.MTOW, 0) + " kg"}\n` + `Draw horizontal lines at ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg; step down the load scales to find each CG. Both must lie in the shaded envelope.`));
   return {
     steps,
     answer: `ZFW ${fmt(zfw, 0)} kg · TOW ${fmt(tow, 0)} kg. Confirm both CG points inside the Fig 7 envelope.`,
