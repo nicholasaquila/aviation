@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!--
   Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
-  This code may not be copied, modified, distributed or used
-  without explicit written permission from the author.
+  App code may not be copied, modified, distributed or used without written permission.
   Contact: nichaquila@gmail.com
+  Loading-system data: Source Civil Aviation Safety Authority (CASA),
+  RPL/PPL/CPL (Aeroplane) Workbook v3.0a, licensed CC BY 4.0.
 -->
 <html lang="en">
 <head>
@@ -23,8 +24,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script>
 /* Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
-   Unauthorised copying, modification, distribution or use prohibited.
-   Contact: nichaquila@gmail.com */
+   Loading-system data: Source CASA (CC BY 4.0). Contact: nichaquila@gmail.com */
 try {
 const {
   useState,
@@ -75,11 +75,13 @@ const ECHO = {
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
-  tag: "v0.8",
+  tag: "v0.10",
   date: "2026-07-07",
-  note: "expanded to full CFPA toolset (6 sections) with sidebar"
+  note: "Alpha worked answers show load sheet + envelope (exact weights, no CG dot)"
 };
 // changelog:
+//  v0.10 — Alpha load-sheet visual + envelope with ZFW/TOW weight lines (CG dot omitted; outline approx)
+//  v0.9 — Alpha loading solver (index-unit system; arithmetic + graphical CG-envelope guidance)
 //  v0.8 — expanded to all CFPA sections (W&B, max weight, fuel, PNR, ETP, climb) + sidebar layout
 //  v0.7 — IU loading chart defaults on; pre-compiled build for reliable GitHub Pages load
 //  v0.6 — IU loading chart projects each point across to the weight axis + Δweight (add/remove) bracket
@@ -1578,6 +1580,352 @@ function generateQuestion(key = "all") {
 }
 
 /* ── GENERIC SECTION (formula-based sections: fuel, PNR, ETP, climb, maxwt) ── */
+/* ── ALPHA LOAD SHEET + ENVELOPE (exact numbers; no CG dot) ─────────────────
+   Source: Civil Aviation Safety Authority, RPL/PPL/CPL (Aeroplane) Workbook (CC BY 4.0).
+   Everything drawn is a verifiable weight. The horizontal CG position is NOT plotted,
+   because the per-row index-unit-per-division values aren't published in the source;
+   the envelope outline is an approximate reconstruction for orientation only.
+   ───────────────────────────────────────────────────────────────────────── */
+function AlphaChart({
+  chart
+}) {
+  if (!chart) return null;
+  const {
+    bew,
+    r1,
+    r2,
+    r3,
+    nose,
+    rear,
+    fuel,
+    zfw,
+    tow
+  } = chart;
+  const rows = [["Basic Empty Weight", bew, true], ["Row 1", r1], ["Row 2", r2], ["Row 3", r3], ["Nose baggage", nose], ["Rear baggage", rear], ["Zero Fuel Weight", zfw, true], ["Fuel", fuel], ["Take-Off Weight", tow, true]].filter(r => r[2] || r[1] > 0);
+  const W = 300,
+    H = 360,
+    padL = 44,
+    padB = 28,
+    padT = 16,
+    padR = 14;
+  const Y0 = 1000,
+    Y1 = 1633;
+  const plotH = H - padT - padB,
+    plotW = W - padL - padR;
+  const sy = w => padT + (1 - (w - Y0) / (Y1 - Y0)) * plotH;
+  const env = [[padL + plotW * 0.10, sy(1633)], [padL + plotW * 0.90, sy(1633)], [padL + plotW * 0.90, sy(1500)], [padL + plotW * 0.70, sy(1300)], [padL + plotW * 0.55, sy(1000)], [padL + plotW * 0.05, sy(1000)], [padL + plotW * 0.05, sy(1400)]];
+  const envPath = "M " + env.map(p => `${p[0]} ${p[1]}`).join(" L ") + " Z";
+  const inLimits = tow <= 1633;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-alphawrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-loadsheet"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-lshead"
+  }, "Load sheet"), /*#__PURE__*/React.createElement("table", {
+    className: "eh-lstable"
+  }, /*#__PURE__*/React.createElement("tbody", null, rows.map((r, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i,
+    className: r[2] ? "sub" : ""
+  }, /*#__PURE__*/React.createElement("td", null, r[0]), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, fmt(r[1], 0), " kg")))))), /*#__PURE__*/React.createElement("div", {
+    className: "eh-alphaenv"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    className: "eh-svg",
+    role: "img",
+    "aria-label": "Alpha envelope approximate"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: padL,
+    y: padT,
+    width: plotW,
+    height: plotH,
+    fill: "rgba(255,255,255,0.02)",
+    stroke: "var(--line)"
+  }), [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1633].map(w => /*#__PURE__*/React.createElement("g", {
+    key: w
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(w),
+    x2: W - padR,
+    y2: sy(w),
+    stroke: "var(--line)",
+    strokeDasharray: "2 4",
+    opacity: "0.4"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL - 5,
+    y: sy(w) + 3,
+    textAnchor: "end",
+    className: "eh-axis"
+  }, w))), /*#__PURE__*/React.createElement("path", {
+    d: envPath,
+    fill: "rgba(218,83,44,0.10)",
+    stroke: "var(--amber)",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(1633),
+    x2: W - padR,
+    y2: sy(1633),
+    stroke: "var(--amber2)",
+    strokeWidth: "1",
+    opacity: "0.8"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: W - padR - 2,
+    y: sy(1633) - 3,
+    textAnchor: "end",
+    className: "eh-axis",
+    fill: "var(--amber2)"
+  }, "MTOW 1633"), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(zfw),
+    x2: W - padR,
+    y2: sy(zfw),
+    stroke: "var(--ink)",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL + 3,
+    y: sy(zfw) - 3,
+    className: "eh-pt"
+  }, "ZFW ", fmt(zfw, 0)), fuel > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: sy(tow),
+    x2: W - padR,
+    y2: sy(tow),
+    stroke: inLimits ? "var(--good)" : "var(--bad)",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL + 3,
+    y: sy(tow) - 3,
+    className: "eh-pt"
+  }, "TOW ", fmt(tow, 0))), /*#__PURE__*/React.createElement("text", {
+    x: padL,
+    y: 12,
+    className: "eh-axis"
+  }, "Envelope \xB7 weight (kg) \u2014 outline approx.")), /*#__PURE__*/React.createElement("p", {
+    className: "eh-alphanote"
+  }, "Weight lines are exact. The envelope outline is an ", /*#__PURE__*/React.createElement("strong", null, "approximate"), " reconstruction and the horizontal CG position is not plotted \u2014 read the CG on your workbook Fig 7. Source: CASA (CC BY 4.0).")));
+}
+
+// ---------- ALPHA LOADING (index-unit graphical system) ----------
+// Source: Civil Aviation Safety Authority, RPL/PPL/CPL (Aeroplane) Workbook v3.0a (CC BY 4.0).
+// The CG check is graphical (plot ZFW/TOW on the Fig 7 envelope). This solver computes
+// every arithmetic step the exam tests and is explicit at the envelope-read step.
+const ALPHA = {
+  MTOW: 1633,
+  NOSE_MAX: 45,
+  REAR_MAX: 45,
+  FUEL_MAX_KG: 256,
+  FUEL_MAX_L: 356,
+  KG_L: 0.72
+};
+function solveAlpha({
+  mode,
+  bew,
+  r1,
+  r2,
+  r3,
+  nose,
+  rear,
+  fuelKg,
+  fuelL
+}) {
+  const n = v => v === "" || v === undefined || v === null ? 0 : Number(v);
+  bew = n(bew);
+  r1 = n(r1);
+  r2 = n(r2);
+  r3 = n(r3);
+  nose = n(nose);
+  rear = n(rear);
+  // fuel may be given in kg or L
+  let fuel = n(fuelKg);
+  if (!fuel && n(fuelL)) fuel = n(fuelL) * ALPHA.KG_L;
+  if (!bew) return {
+    steps: [],
+    answer: null,
+    error: "Enter at least the Basic Empty Weight."
+  };
+  const zfw = bew + r1 + r2 + r3 + nose + rear;
+  const steps = [];
+  steps.push(stepC("1. Zero Fuel Weight", "ZFW = BEW + Row1 + Row2 + Row3 + Nose + Rear", `ZFW = ${fmt(bew)} + ${fmt(r1)} + ${fmt(r2)} + ${fmt(r3)} + ${fmt(nose)} + ${fmt(rear)} = ${fmt(zfw, 0)} kg`));
+
+  // station-limit checks
+  const warn = [];
+  if (nose > ALPHA.NOSE_MAX) warn.push(`Nose baggage ${fmt(nose)} kg exceeds 45 kg max`);
+  if (rear > ALPHA.REAR_MAX) warn.push(`Rear baggage ${fmt(rear)} kg exceeds 45 kg max`);
+  if (mode === "maxFuel") {
+    // structural: MTOW - ZFW; station: fuel cap 256. Envelope CG-limited MTOW read off graph.
+    const structAvail = ALPHA.MTOW - zfw;
+    const capLimited = Math.min(structAvail, ALPHA.FUEL_MAX_KG);
+    steps.push(stepC("2. Weight available for fuel (structural)", "MTOW − ZFW", `1633 − ${fmt(zfw, 0)} = ${fmt(structAvail, 0)} kg`));
+    steps.push(stepC("3. Station limit", "Fuel tanks max 256 kg (356 L)", `smaller of (${fmt(structAvail, 0)}, 256) = ${fmt(capLimited, 0)} kg`));
+    steps.push(stepC("4. CG-envelope check (graphical)", "plot ZFW on Fig 7 — the CG-limited MTOW may be < 1633", `If the ZFW CG sits forward/aft such that the envelope caps MTOW below 1633, that lower figure binds instead. Read the MTOW at this CG off the envelope; if it is below ${fmt(zfw + capLimited, 0)} kg, fuel = (envelope MTOW − ZFW).`));
+    return {
+      steps,
+      answer: `Max fuel = ${fmt(capLimited, 0)} kg (${fmt(capLimited / ALPHA.KG_L, 0)} L) by weight/station — confirm against the envelope CG limit.`,
+      warn,
+      chart: {
+        bew,
+        r1,
+        r2,
+        r3,
+        nose,
+        rear,
+        fuel: capLimited,
+        zfw,
+        tow: zfw + capLimited
+      }
+    };
+  }
+  if (mode === "maxBaggage") {
+    // fuel given; TOW = ZFW + fuel; available baggage by weight = MTOW - TOW, capped by station 45 each
+    const tow = zfw + fuel;
+    steps.push(stepC("2. Take-Off Weight (before extra baggage)", "TOW = ZFW + fuel", `TOW = ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
+    const structAvail = ALPHA.MTOW - tow;
+    steps.push(stepC("3. Weight available (structural)", "MTOW − TOW", `1633 − ${fmt(tow, 0)} = ${fmt(structAvail, 0)} kg`));
+    const stationMax = ALPHA.NOSE_MAX + ALPHA.REAR_MAX - nose - rear;
+    steps.push(stepC("4. Station capacity remaining", "nose(45) + rear(45) − already loaded", `= ${fmt(stationMax, 0)} kg of baggage space`));
+    steps.push(stepC("5. CG-envelope check (graphical)", "plot on Fig 7 — CG limit often binds before weight", `The maximum baggage is the SMALLEST of: structural (${fmt(structAvail, 0)}), station capacity (${fmt(stationMax, 0)}), and the amount that keeps the ZFW/TOW CG inside the envelope (read off Fig 7). In many questions the envelope CG limit is the binding one.`));
+    return {
+      steps,
+      answer: `Baggage limited to ≤ ${fmt(Math.min(structAvail, stationMax), 0)} kg by weight/station — the envelope CG limit may reduce this further.`,
+      warn,
+      chart: {
+        bew,
+        r1,
+        r2,
+        r3,
+        nose,
+        rear,
+        fuel,
+        zfw,
+        tow
+      }
+    };
+  }
+  if (mode === "minBallast") {
+    const tow = zfw + fuel;
+    steps.push(stepC("2. Take-Off Weight", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
+    steps.push(stepC("3. Plot ZFW and TOW on Fig 7 (graphical)", "check both CG points are inside the envelope", `Draw horizontal lines at ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg; step down the load-item scales to find the CG. If a point is forward of the fwd limit, ballast is needed aft.`));
+    steps.push(stepC("4. Minimum ballast (graphical)", "add ballast in the station with the LONGEST arm (rear baggage) — least weight moves CG most", `Rear baggage has the longest arm, so it needs the least ballast to bring the CG onto the limit. Draw the load-shift line from the current ZFW CG toward the rear-baggage arrow and read where it re-enters the envelope; ballast = (that ZFW) − (current ZFW).`));
+    return {
+      steps,
+      answer: `Ballast required = read off the envelope (rear compartment, longest arm = minimum ballast). Enter values in the workbook Fig 7 to get the exact kg.`,
+      warn,
+      chart: {
+        bew,
+        r1,
+        r2,
+        r3,
+        nose,
+        rear,
+        fuel,
+        zfw,
+        tow
+      }
+    };
+  }
+
+  // just a load sheet / limit check
+  const tow = zfw + fuel;
+  steps.push(stepC("2. Fuel", "kg = L × 0.72 (max 256 kg / 356 L)", fuel ? `Fuel = ${fmt(fuel, 0)} kg${n(fuelL) ? " (" + fmt(n(fuelL)) + " L)" : ""}` : "No fuel entered"));
+  steps.push(stepC("3. Take-Off Weight", "TOW = ZFW + fuel", `= ${fmt(zfw, 0)} + ${fmt(fuel, 0)} = ${fmt(tow, 0)} kg`));
+  steps.push(stepC("4. Checks", "MTOW 1633 · nose 45 · rear 45 · plot CG on Fig 7", `TOW vs MTOW 1633 → ${tow <= ALPHA.MTOW ? "OK ✓" : "❌ OVER by " + fmt(tow - ALPHA.MTOW, 0) + " kg"}\n` + `Then plot ZFW ${fmt(zfw, 0)} kg and TOW ${fmt(tow, 0)} kg on the Fig 7 envelope — both must sit inside the shaded area.`));
+  return {
+    steps,
+    answer: `ZFW ${fmt(zfw, 0)} kg · TOW ${fmt(tow, 0)} kg. Confirm both CG points inside the Fig 7 envelope.`,
+    warn,
+    chart: {
+      bew,
+      r1,
+      r2,
+      r3,
+      nose,
+      rear,
+      fuel,
+      zfw,
+      tow
+    }
+  };
+}
+function genAlpha() {
+  const mode = pick(["maxFuel", "maxBaggage", "minBallast", "loadSheet"]);
+  const bew = rand(880, 1200, 1),
+    iu = rand(-290, -150, 10);
+  const r1 = rand(75, 231, 1);
+  if (mode === "maxFuel") {
+    const r2 = rand(77, 160, 1),
+      r3 = rand(50, 130, 1),
+      nose = rand(0, 45, 5);
+    return {
+      section: "alpha",
+      type: "Max fuel at take-off",
+      prompt: `Alpha: BEW ${bew} kg, IU ${iu}. Row 1 ${r1} kg, Row 2 ${r2} kg, Row 3 ${r3} kg, nose baggage ${nose} kg. What is the maximum weight of fuel (kg) that may be carried at take-off?`,
+      preset: {
+        mode: "maxFuel",
+        bew,
+        r1,
+        r2,
+        r3,
+        nose
+      }
+    };
+  }
+  if (mode === "maxBaggage") {
+    const r2 = rand(77, 160, 1),
+      r3 = rand(50, 130, 1),
+      fuelL = rand(120, 200, 5);
+    return {
+      section: "alpha",
+      type: "Max baggage",
+      prompt: `Alpha: BEW ${bew} kg, IU ${iu}. Row 1 ${r1} kg, Row 2 ${r2} kg, Row 3 ${r3} kg, fuel ${fuelL} L. What is the maximum weight of baggage that may be carried?`,
+      preset: {
+        mode: "maxBaggage",
+        bew,
+        r1,
+        r2,
+        r3,
+        fuelL
+      }
+    };
+  }
+  if (mode === "minBallast") {
+    const r1b = rand(200, 231, 1),
+      r2 = rand(50, 77, 1),
+      fuelL = rand(225, 250, 5);
+    return {
+      section: "alpha",
+      type: "Min ballast",
+      prompt: `Alpha: BEW ${bew} kg, IU ${iu}. Row 1 ${r1b} kg, Row 2 ${r2} kg, fuel ${fuelL} L. What is the minimum ballast required for this flight?`,
+      preset: {
+        mode: "minBallast",
+        bew,
+        r1: r1b,
+        r2,
+        fuelL
+      }
+    };
+  }
+  const r2 = rand(77, 160, 1),
+    r3 = rand(50, 130, 1),
+    nose = rand(0, 45, 5),
+    fuelL = rand(120, 200, 5);
+  return {
+    section: "alpha",
+    type: "Load sheet / limit check",
+    prompt: `Alpha: BEW ${bew} kg, IU ${iu}. Row 1 ${r1} kg, Row 2 ${r2} kg, Row 3 ${r3} kg, nose ${nose} kg, fuel ${fuelL} L. Complete the load sheet and check the aircraft is within limits.`,
+    preset: {
+      mode: "loadSheet",
+      bew,
+      r1,
+      r2,
+      r3,
+      nose,
+      fuelL
+    }
+  };
+}
 function GenericSection({
   cfg
 }) {
@@ -1649,7 +1997,9 @@ function GenericSection({
     className: "eh-verdict"
   }, /*#__PURE__*/React.createElement("span", {
     className: "eh-verdict-tag"
-  }, "RESULT"), result.answer)), tab === "practice" && /*#__PURE__*/React.createElement("section", {
+  }, "RESULT"), result.answer), result.chart && /*#__PURE__*/React.createElement(AlphaChart, {
+    chart: result.chart
+  })), tab === "practice" && /*#__PURE__*/React.createElement("section", {
     className: "eh-panel"
   }, !q && /*#__PURE__*/React.createElement("div", {
     className: "eh-empty"
@@ -1690,7 +2040,9 @@ function GenericSection({
     className: "eh-verdict"
   }, /*#__PURE__*/React.createElement("span", {
     className: "eh-verdict-tag"
-  }, "ANSWER"), qResult.answer)))));
+  }, "ANSWER"), qResult.answer), qResult.chart && /*#__PURE__*/React.createElement(AlphaChart, {
+    chart: qResult.chart
+  })))));
 }
 
 // Section configs for the five formula-based modules
@@ -1700,6 +2052,65 @@ const modeField = opts => ({
   options: opts
 });
 const SECTION_CFG = {
+  alpha: {
+    solve: solveAlpha,
+    gen: genAlpha,
+    defaults: {
+      mode: "loadSheet"
+    },
+    practiceBlurb: "Alpha loading (index-unit graphical system): max fuel, max baggage, min ballast, load sheet.",
+    fields: inp => {
+      const base = [modeField([{
+        value: "loadSheet",
+        label: "Load sheet / limit check"
+      }, {
+        value: "maxFuel",
+        label: "Max fuel at take-off"
+      }, {
+        value: "maxBaggage",
+        label: "Max baggage"
+      }, {
+        value: "minBallast",
+        label: "Min ballast"
+      }])];
+      const common = [{
+        key: "bew",
+        label: "Basic Empty Weight (kg)",
+        placeholder: "1050"
+      }, {
+        key: "r1",
+        label: "Row 1 (kg)",
+        placeholder: "150"
+      }, {
+        key: "r2",
+        label: "Row 2 (kg)",
+        placeholder: "154"
+      }, {
+        key: "r3",
+        label: "Row 3 (kg)",
+        placeholder: "120"
+      }, {
+        key: "nose",
+        label: "Nose baggage (kg, max 45)",
+        placeholder: "40"
+      }, {
+        key: "rear",
+        label: "Rear baggage (kg, max 45)",
+        placeholder: "0"
+      }];
+      const fuel = [{
+        key: "fuelL",
+        label: "Fuel (litres)",
+        placeholder: "150"
+      }, {
+        key: "fuelKg",
+        label: "…or fuel (kg)",
+        placeholder: ""
+      }];
+      if (inp.mode === "maxFuel") return [...base, ...common.slice(0, 5)];
+      return [...base, ...common, ...fuel];
+    }
+  },
   fuel: {
     solve: solveFuel,
     gen: genFuel,
@@ -1904,9 +2315,14 @@ const SECTION_CFG = {
 };
 const SECTIONS = [{
   key: "wb",
-  label: "Weight & Balance",
-  short: "W&B",
-  desc: "Echo loading system"
+  label: "Echo — Weight & Balance",
+  short: "Echo W&B",
+  desc: "Loading System Echo"
+}, {
+  key: "alpha",
+  label: "Alpha loading",
+  short: "Alpha",
+  desc: "Index-unit system"
 }, {
   key: "maxwt",
   label: "Max weight / payload / fuel",
@@ -2045,6 +2461,16 @@ const CSS = `
 .gt:hover{border-color:var(--amber);color:var(--ink)}
 .gt.on{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:700}
 .eh-version{margin-top:22px;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--dim);opacity:.7;letter-spacing:.04em}
+.eh-alphawrap{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.eh-loadsheet,.eh-alphaenv{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+.eh-lshead{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--amber2);margin-bottom:8px}
+.eh-lstable{width:100%;border-collapse:collapse;font-size:13px}
+.eh-lstable td{padding:5px 4px;border-bottom:1px dashed rgba(139,166,200,.18)}
+.eh-lstable td.num{text-align:right;font-family:var(--mono)}
+.eh-lstable tr.sub td{font-weight:700;color:var(--amber2);border-bottom:1px solid var(--line)}
+.eh-alphanote{margin:8px 0 0;font-size:11px;line-height:1.5;color:var(--dim);font-family:var(--mono)}
+.eh-alphanote strong{color:var(--amber2)}
+@media (max-width:560px){.eh-alphawrap{grid-template-columns:1fr}}
 .eh-svg{width:100%;height:auto;display:block}
 .eh-axis{font-family:var(--mono);font-size:9px;fill:var(--dim)}
 .eh-pt{font-family:var(--mono);font-size:10px;fill:var(--ink);font-weight:600}
