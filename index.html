@@ -1,9 +1,15 @@
 <!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
+  This code may not be copied, modified, distributed or used
+  without explicit written permission from the author.
+  Contact: nichaquila@gmail.com
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Echo Loading Helper · Learn To Fly Melbourne</title>
+<title>CFPA Study Helper · Learn To Fly Melbourne</title>
 <style>
   html,body{margin:0;padding:0;background:#0a1526;}
   #root{min-height:100vh;}
@@ -12,10 +18,13 @@
 </style>
 </head>
 <body>
-<div id="root"><div id="boot">Loading Echo Loading Helper…</div></div>
+<div id="root"><div id="boot">Loading CFPA Study Helper…</div></div>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script>
+/* Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
+   Unauthorised copying, modification, distribution or use prohibited.
+   Contact: nichaquila@gmail.com */
 try {
 const {
   useState,
@@ -23,16 +32,15 @@ const {
 } = React;
 
 /* ──────────────────────────────────────────────────────────────────────────
+   Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
+   This code may not be copied, modified, distributed or used
+   without explicit written permission from the author.
+   Contact: nichaquila@gmail.com
+   ──────────────────────────────────────────────────────────────────────────
+
    ECHO LOADING HELPER  ·  Learn To Fly Melbourne
    Weight & Balance only (CG · ballast · fuel · limits) + graphical CG envelope
    CASA Workbook v3.0a — Loading System Echo
-
-   <!--
-  Copyright (c) 2026 Nicholas Aquila Carpeggiani. All rights reserved.
-  This code may not be copied, modified, distributed or used
-  without explicit written permission from the author.
-  Contact: nichaquila@gmail.com
--->
    ────────────────────────────────────────────────────────────────────────── */
 
 const ECHO = {
@@ -67,11 +75,12 @@ const ECHO = {
 
 // ── Version marker (bump on every update; newest first) ──────────────────────
 const APP_VERSION = {
-  tag: "v0.7",
+  tag: "v0.8",
   date: "2026-07-07",
-  note: "IU loading chart is now the default graph view"
+  note: "expanded to full CFPA toolset (6 sections) with sidebar"
 };
 // changelog:
+//  v0.8 — expanded to all CFPA sections (W&B, max weight, fuel, PNR, ETP, climb) + sidebar layout
 //  v0.7 — IU loading chart defaults on; pre-compiled build for reliable GitHub Pages load
 //  v0.6 — IU loading chart projects each point across to the weight axis + Δweight (add/remove) bracket
 //  v0.5 — dual graphs: CG-vs-weight + index(IU)-vs-weight loading chart, toggle, version marker
@@ -764,8 +773,381 @@ function IndexGraph({
   }, "Loading chart \xB7 weight (kg) vs index units (IU)"));
 }
 
-/* ── UI ─────────────────────────────────────────────────────────────────── */
-function EchoLoadingHelper() {
+/* ══════════════════════════════════════════════════════════════════════════
+   ADDITIONAL CFPA SECTION MODULES
+   All original solvers/generators built from CASA public Echo data + physics.
+   Each section exports: solveX(inputs) -> {steps,answer} and genX() -> question.
+   ══════════════════════════════════════════════════════════════════════════ */
+const KG_USG = ECHO.KG_PER_USG; // 2.72
+const stepC = (title, formula, work) => ({
+  title,
+  formula,
+  work
+});
+
+// ---------- FUEL PLANNING ----------
+function solveFuel({
+  mode,
+  fob,
+  taxi,
+  reserve,
+  ff,
+  trip
+}) {
+  fob = Number(fob);
+  taxi = Number(taxi);
+  reserve = Number(reserve);
+  ff = Number(ff);
+  trip = Number(trip);
+  if (mode === "endurance") {
+    if (!fob || !ff) return {
+      steps: [],
+      answer: null,
+      error: "Enter fuel on board and fuel flow."
+    };
+    const usable = fob - (taxi || 0) - (reserve || 0);
+    const hr = usable / ff;
+    return {
+      steps: [stepC("1. Strip the untouchables", "usable = FOB − taxi − reserve", `usable = ${fmt(fob)} − ${fmt(taxi || 0)} − ${fmt(reserve || 0)} = ${fmt(usable, 1)} USG`), stepC("2. Safe endurance", "SE = usable ÷ fuel flow", `SE = ${fmt(usable, 1)} ÷ ${fmt(ff)} = ${fmt(hr, 3)} hr = ${fmt(hr * 60, 0)} min`)],
+      answer: `Safe endurance ≈ ${fmt(hr * 60, 0)} min (${fmt(hr, 2)} hr).`
+    };
+  }
+  if (mode === "contingency") {
+    if (!trip) return {
+      steps: [],
+      answer: null,
+      error: "Enter trip fuel."
+    };
+    const c = 0.10 * trip;
+    return {
+      steps: [stepC("1. Rule (Part 135 piston)", "contingency = 10% of TRIP fuel", `always % of trip, not total.`), stepC("2. Compute", "0.10 × trip", `= 0.10 × ${fmt(trip)} = ${fmt(c, 1)}`)],
+      answer: `Contingency = ${fmt(c, 1)} (same units as trip).`
+    };
+  }
+  // reserve at a named flow (45 min piston)
+  if (!ff) return {
+    steps: [],
+    answer: null,
+    error: "Enter the fuel flow to use for the reserve."
+  };
+  const r = 0.75 * ff;
+  return {
+    steps: [stepC("1. Reserve fixed by time", "Part 135 piston final reserve = 45 min", `quantity comes from the named flow.`), stepC("2. Apply named flow", "reserve = 45/60 × FF", `= 0.75 × ${fmt(ff)} = ${fmt(r, 2)} USG`), stepC("3. Trap", "don't default to a pre-baked figure", `use the flow the question names.`)],
+    answer: `Final reserve = ${fmt(r, 2)} USG.`
+  };
+}
+function genFuel() {
+  const mode = pick(["endurance", "contingency", "reserve"]);
+  if (mode === "endurance") {
+    const fob = rand(150, 178, 2),
+      ff = rand(20, 28, 1);
+    return {
+      section: "fuel",
+      type: "Safe endurance",
+      prompt: `An Echo starts with ${fob} USG. Taxi 3 USG, final reserve 15 USG, cruise fuel flow ${ff} USG/hr. Find the safe endurance.`,
+      preset: {
+        mode: "endurance",
+        fob,
+        taxi: 3,
+        reserve: 15,
+        ff
+      }
+    };
+  }
+  if (mode === "contingency") {
+    const trip = rand(120, 240, 5);
+    return {
+      section: "fuel",
+      type: "Contingency (Part 135 piston)",
+      prompt: `A Part 135 piston Echo flight has ${trip} L of trip fuel. Find the contingency fuel.`,
+      preset: {
+        mode: "contingency",
+        trip
+      }
+    };
+  }
+  const ff = rand(21, 26, 1);
+  return {
+    section: "fuel",
+    type: "Final reserve at a named flow",
+    prompt: `A Part 135 piston Echo must carry 45 min final reserve, using cruise fuel flow ${ff} USG/hr. Find the reserve fuel.`,
+    preset: {
+      mode: "reserve",
+      ff
+    }
+  };
+}
+
+// ---------- PNR (symmetric single-home) ----------
+function solvePNR({
+  fob,
+  taxi,
+  reserve,
+  ff,
+  tas,
+  wind
+}) {
+  fob = Number(fob);
+  taxi = Number(taxi);
+  reserve = Number(reserve);
+  ff = Number(ff);
+  tas = Number(tas);
+  wind = Number(wind);
+  if (!fob || !ff || !tas) return {
+    steps: [],
+    answer: null,
+    error: "Enter fuel on board, fuel flow and TAS."
+  };
+  const usable = fob - (taxi || 0) - (reserve || 0);
+  const se = usable / ff;
+  const gsO = tas - wind,
+    gsH = tas + wind;
+  const t = se * gsH / (gsO + gsH);
+  const d = gsO * t;
+  return {
+    steps: [stepC("1. Safe endurance", "SE = (FOB − taxi − reserve) ÷ FF", `usable = ${fmt(fob)} − ${fmt(taxi || 0)} − ${fmt(reserve || 0)} = ${fmt(usable, 1)} USG\nSE = ${fmt(usable, 1)} ÷ ${fmt(ff)} = ${fmt(se, 3)} hr`), stepC("2. Groundspeeds", "GS(O) = TAS − wind ; GS(H) = TAS + wind", `GS(O) = ${fmt(tas)} − ${fmt(wind)} = ${fmt(gsO)} kt\nGS(H) = ${fmt(tas)} + ${fmt(wind)} = ${fmt(gsH)} kt`), stepC("3. Time to PNR", "t = SE × GS(H) ÷ (GS(O)+GS(H))", `t = ${fmt(se, 3)} × ${fmt(gsH)} ÷ ${fmt(gsO + gsH)} = ${fmt(t, 3)} hr = ${fmt(t * 60, 0)} min`), stepC("4. Distance to PNR", "d = GS(O) × t", `d = ${fmt(gsO)} × ${fmt(t, 3)} = ${fmt(d, 0)} nm`)],
+    answer: `PNR: ${fmt(t * 60, 0)} min out, ${fmt(d, 0)} nm from departure.`
+  };
+}
+function genPNR() {
+  const tas = rand(160, 190, 5),
+    wind = rand(20, 40, 5),
+    fob = rand(150, 175, 5),
+    ff = rand(20, 26, 1);
+  return {
+    section: "pnr",
+    type: "Standard PNR",
+    prompt: `An Echo departs with ${fob} USG (taxi 3, reserve 15). Cruise FF ${ff} USG/hr, TAS ${tas} kt, ${wind} kt headwind outbound (tailwind home). Find time and distance to the PNR.`,
+    preset: {
+      fob,
+      taxi: 3,
+      reserve: 15,
+      ff,
+      tas,
+      wind
+    }
+  };
+}
+
+// ---------- ETP / CP (normal ops) ----------
+function solveETP({
+  D,
+  tas,
+  wind
+}) {
+  D = Number(D);
+  tas = Number(tas);
+  wind = Number(wind);
+  if (!D || !tas) return {
+    steps: [],
+    answer: null,
+    error: "Enter distance and TAS."
+  };
+  const gsO = tas - wind,
+    gsH = tas + wind;
+  const x = D * gsH / (gsO + gsH);
+  const t = x / gsO * 60;
+  return {
+    steps: [stepC("1. Groundspeeds", "GS(O) = TAS − wind ; GS(H) = TAS + wind", `GS(O) = ${fmt(gsO)} kt, GS(H) = ${fmt(gsH)} kt`), stepC("2. Distance to ETP", "X = D × GS(H) ÷ (GS(O)+GS(H))", `X = ${fmt(D)} × ${fmt(gsH)} ÷ ${fmt(gsO + gsH)} = ${fmt(x, 1)} nm`), stepC("3. Time to ETP", "t = X ÷ GS(O) × 60", `t = ${fmt(x, 1)} ÷ ${fmt(gsO)} × 60 = ${fmt(t, 0)} min`)],
+    answer: `ETP: ${fmt(x, 0)} nm / ${fmt(t, 0)} min from departure.`
+  };
+}
+function genETP() {
+  const D = rand(300, 600, 10),
+    tas = rand(160, 190, 5),
+    wind = rand(20, 40, 5);
+  return {
+    section: "etp",
+    type: "ETP (normal ops)",
+    prompt: `Two aerodromes are ${D} nm apart. An Echo cruises TAS ${tas} kt with a ${wind} kt headwind outbound (tailwind return). Find distance and time to the ETP from departure.`,
+    preset: {
+      D,
+      tas,
+      wind
+    }
+  };
+}
+
+// ---------- CLIMB & CRUISE ----------
+function solveClimb({
+  mode,
+  height,
+  rocB,
+  rocT,
+  tasB,
+  tasT,
+  ffTot,
+  grad,
+  tas,
+  wind
+}) {
+  if (mode === "gradient") {
+    grad = Number(grad);
+    tas = Number(tas);
+    wind = Number(wind);
+    if (!grad || !tas) return {
+      steps: [],
+      answer: null,
+      error: "Enter gradient and TAS."
+    };
+    const gs = tas - (wind || 0);
+    const roc = grad / 100 * gs * 101.3;
+    return {
+      steps: [stepC("1. Groundspeed", "GS = TAS − headwind", `GS = ${fmt(tas)} − ${fmt(wind || 0)} = ${fmt(gs)} kt`), stepC("2. ROC required", "ROC = gradient% × GS (1 kt ≈ 101.3 ft/min)", `= ${fmt(grad)}% × ${fmt(gs)} = ${fmt(roc, 0)} ft/min`), stepC("3. Note", "headwind lowers GS → lowers the ROC needed", `counter-intuitive but correct.`)],
+      answer: `Required ROC ≈ ${fmt(roc, 0)} ft/min.`
+    };
+  }
+  // time/distance/fuel
+  height = Number(height);
+  rocB = Number(rocB);
+  rocT = Number(rocT);
+  tasB = Number(tasB);
+  tasT = Number(tasT);
+  ffTot = Number(ffTot);
+  if (!height || !rocB || !tasB) return {
+    steps: [],
+    answer: null,
+    error: "Enter height, ROC and TAS."
+  };
+  const roc = (rocB + (rocT || rocB)) / 2,
+    tasAvg = (tasB + (tasT || tasB)) / 2;
+  const t = height / roc;
+  return {
+    steps: [stepC("1. Average the rates", "avg ROC & avg TAS = (bottom+top)/2", `avg ROC = ${fmt(roc, 0)} ft/min\navg TAS = ${fmt(tasAvg, 1)} kt`), stepC("2. Time", "t = height ÷ avg ROC", `t = ${fmt(height)} ÷ ${fmt(roc, 0)} = ${fmt(t, 2)} min`), stepC("3. Distance", "d = avg TAS ÷ 60 × t", `d = ${fmt(tasAvg, 1)} ÷ 60 × ${fmt(t, 2)} = ${fmt(tasAvg / 60 * t, 1)} nm`), ...(ffTot ? [stepC("4. Fuel", "fuel = FF ÷ 60 × t", `= ${fmt(ffTot)} ÷ 60 × ${fmt(t, 2)} = ${fmt(ffTot / 60 * t, 1)} USG`)] : [])],
+    answer: `Climb: ${fmt(t, 1)} min, ${fmt(tasAvg / 60 * t, 1)} nm${ffTot ? ", " + fmt(ffTot / 60 * t, 1) + " USG" : ""}.`
+  };
+}
+function genClimb() {
+  const mode = pick(["tdf", "gradient"]);
+  if (mode === "gradient") {
+    const grad = rand(3, 6, 1),
+      tas = rand(90, 110, 1),
+      wind = rand(0, 25, 5);
+    return {
+      section: "climb",
+      type: "Climb gradient → ROC",
+      prompt: `An Echo must hold a ${grad}% climb gradient. TAS ${tas} kt, ${wind} kt headwind. What ROC (ft/min) is required?`,
+      preset: {
+        mode: "gradient",
+        grad,
+        tas,
+        wind
+      }
+    };
+  }
+  const height = rand(8000, 13000, 1000),
+    rocB = rand(1400, 1600, 50),
+    rocT = rand(1250, 1400, 50);
+  const tasB = rand(100, 110, 1),
+    tasT = rand(115, 125, 1);
+  return {
+    section: "climb",
+    type: "Climb time / distance / fuel",
+    prompt: `An Echo climbs to ${height} ft. ROC ${rocB} ft/min bottom, ${rocT} top; TAS ${tasB} kt bottom, ${tasT} top. Climb FF 63.4 USG/hr. Find time, distance and fuel (nil wind).`,
+    preset: {
+      mode: "tdf",
+      height,
+      rocB,
+      rocT,
+      tasB,
+      tasT,
+      ffTot: 63.4
+    }
+  };
+}
+
+// ---------- MAX WEIGHT / PAYLOAD / FUEL ----------
+function solveMaxWt({
+  mode,
+  ff,
+  other,
+  tow,
+  usg,
+  ew,
+  pax,
+  cargo
+}) {
+  ff = Number(ff);
+  other = Number(other);
+  tow = Number(tow);
+  usg = Number(usg);
+  ew = Number(ew);
+  pax = Number(pax);
+  cargo = Number(cargo);
+  if (mode === "maxTOW") {
+    if (!ff || !other) return {
+      steps: [],
+      answer: null,
+      error: "Enter flight fuel and other fuel."
+    };
+    const lw = ECHO.MTOW - ff,
+      zfw = lw - other;
+    const lwOver = lw - ECHO.MLW,
+      zfwOver = zfw - ECHO.MZFW;
+    let bind, newTOW;
+    if (lwOver >= zfwOver) {
+      bind = "LW";
+      newTOW = ECHO.MLW + ff;
+    } else {
+      bind = "ZFW";
+      newTOW = ECHO.MZFW + other + ff;
+    }
+    return {
+      steps: [stepC("1. Test MTOW 2950", "LW = MTOW − FF ; ZFW = LW − other", `LW = 2950 − ${fmt(ff)} = ${fmt(lw, 0)}\nZFW = ${fmt(lw, 0)} − ${fmt(other)} = ${fmt(zfw, 0)}`), stepC("2. Compare ceilings", "exceedance = value − limit", `LW vs 2725 → over ${fmt(lwOver, 0)}\nZFW vs 2630 → over ${fmt(zfwOver, 0)}`), stepC("3. Greatest exceedance binds", "", `${bind} binds.`), stepC("4. Back fuel up to it", bind === "LW" ? "MTOW = MLW + FF" : "MTOW = MZFW + other + FF", bind === "LW" ? `= 2725 + ${fmt(ff)} = ${fmt(newTOW, 0)}` : `= 2630 + ${fmt(other)} + ${fmt(ff)} = ${fmt(newTOW, 0)}`)],
+      answer: `${bind} binds → max take-off weight = ${fmt(newTOW, 0)} kg.`
+    };
+  }
+  // max cargo
+  if (!tow || !ew) return {
+    steps: [],
+    answer: null,
+    error: "Enter take-off weight and empty weight."
+  };
+  const fobKg = (usg || 0) * KG_USG;
+  const zfw = tow - fobKg;
+  const payload = zfw - ew - 77;
+  const c = payload - (pax || 0) * 77;
+  return {
+    steps: [stepC("1. FOB → kg, ZFW", "ZFW = TOW − FOB", `FOB = ${fmt(usg || 0)}×2.72 = ${fmt(fobKg, 1)} kg\nZFW = ${fmt(tow)} − ${fmt(fobKg, 1)} = ${fmt(zfw, 1)} kg`), stepC("2. Payload", "payload = ZFW − empty − pilot", `= ${fmt(zfw, 1)} − ${fmt(ew)} − 77 = ${fmt(payload, 1)} kg`), stepC("3. Cargo", "cargo = payload − pax", `= ${fmt(payload, 1)} − ${fmt(pax || 0)}×77 = ${fmt(c, 1)} kg`)],
+    answer: `Max cargo = ${fmt(c, 0)} kg.`
+  };
+}
+function genMaxWt() {
+  const mode = pick(["maxTOW", "maxCargo"]);
+  if (mode === "maxTOW") {
+    const ff = rand(90, 160, 2),
+      other = rand(150, 180, 2);
+    return {
+      section: "maxwt",
+      type: "Max take-off weight",
+      prompt: `An Echo burns ${ff} kg flight fuel, carrying ${other} kg reserve+contingency (other fuel). MTOW 2950, MLW 2725, MZFW 2630. Find the max take-off weight.`,
+      preset: {
+        mode: "maxTOW",
+        ff,
+        other
+      }
+    };
+  }
+  const tow = rand(2820, 2900, 10),
+    usg = rand(90, 130, 5),
+    ew = rand(1950, 2010, 5),
+    pax = rand(2, 4);
+  return {
+    section: "maxwt",
+    type: "Max cargo",
+    prompt: `An Echo has take-off weight ${tow} kg, ${usg} USG fuel, empty weight ${ew} kg, pilot + ${pax} pax (77 kg each). Find the max cargo.`,
+    preset: {
+      mode: "maxCargo",
+      tow,
+      usg,
+      ew,
+      pax
+    }
+  };
+}
+
+/* ── WEIGHT & BALANCE SECTION (existing, verified) ────────────────────────── */
+function WBSection() {
   const [tab, setTab] = useState("solve");
   const [weight, setWeight] = useState("");
   const [iu, setIU] = useState("");
@@ -798,21 +1180,7 @@ function EchoLoadingHelper() {
   }
   const qResult = q ? solve(q.preset) : null;
   const showGraph = result.summary && !result.error;
-  return /*#__PURE__*/React.createElement("div", {
-    className: "eh-root"
-  }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement("header", {
-    className: "eh-head"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "eh-badge"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "eh-badge-ltf"
-  }, "LTF"), /*#__PURE__*/React.createElement("span", {
-    className: "eh-badge-echo"
-  }, "ECHO")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", null, "Echo Loading Helper"), /*#__PURE__*/React.createElement("p", {
-    className: "eh-sub"
-  }, "Learn To Fly Melbourne \xB7 YMMB Moorabbin \xB7 Weight & Balance \xB7 Loading System Echo")), /*#__PURE__*/React.createElement("div", {
-    className: "eh-tail"
-  }, "VH-ECHO")), /*#__PURE__*/React.createElement("nav", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("nav", {
     className: "eh-tabs"
   }, /*#__PURE__*/React.createElement("button", {
     className: tab === "solve" ? "on" : "",
@@ -1057,9 +1425,7 @@ function EchoLoadingHelper() {
     className: "eh-slopenote"
   }, /*#__PURE__*/React.createElement("strong", null, "Forward vs aft \u2014 why the graph matters."), " The aft limit is 2680 mm at every weight, so add / remove / shift to the aft limit is always formula-valid. The forward limit ", /*#__PURE__*/React.createElement("em", null, "slopes"), " (2400 mm up to 2360 kg, then rearward at 0.27 mm/kg to 2560 mm at 2950 kg), so when you add or remove weight the target limit moves as you go. This app solves that intersection exactly \u2014 the same point you'd read off Fig 11 graphically \u2014 and plots it on the envelope above."), /*#__PURE__*/React.createElement("p", {
     className: "eh-disclaimer"
-  }, "Student study aid for CPL Flight Planning, built from CASA RPL/PPL/CPL Workbook v3.0a data. Not an official Learn To Fly Melbourne document and not for operational use \u2014 always cross-check against the current workbook, the Part 91/135 MOS, and your instructor.")), /*#__PURE__*/React.createElement("footer", {
-    className: "eh-version"
-  }, APP_VERSION.tag, " \xB7 ", APP_VERSION.date, " \xB7 ", APP_VERSION.note));
+  }, "Student study aid for CPL Flight Planning, built from CASA RPL/PPL/CPL Workbook v3.0a data. Not an official Learn To Fly Melbourne document and not for operational use \u2014 always cross-check against the current workbook, the Part 91/135 MOS, and your instructor.")));
 }
 function RefCard({
   title,
@@ -1210,6 +1576,413 @@ function generateQuestion(key = "all") {
   const chosen = key === "all" ? pick(VARIANT_ORDER) : key;
   return (VARIANTS[chosen] || VARIANTS.addAft).gen();
 }
+
+/* ── GENERIC SECTION (formula-based sections: fuel, PNR, ETP, climb, maxwt) ── */
+function GenericSection({
+  cfg
+}) {
+  const [tab, setTab] = useState("solve");
+  const [inputs, setInputs] = useState(cfg.defaults || {});
+  const [q, setQ] = useState(null);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const result = useMemo(() => cfg.solve(inputs), [inputs, cfg]);
+  function set(k, v) {
+    setInputs(p => ({
+      ...p,
+      [k]: v
+    }));
+  }
+  function newQuestion() {
+    setQ(cfg.gen());
+    setShowAnswer(false);
+  }
+  function loadIntoSolver() {
+    if (!q?.preset) return;
+    setInputs(q.preset);
+    setTab("solve");
+  }
+  const qResult = q ? cfg.solve(q.preset) : null;
+
+  // fields shown depend on the current mode (if the section has one)
+  const activeFields = typeof cfg.fields === "function" ? cfg.fields(inputs) : cfg.fields;
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("nav", {
+    className: "eh-tabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: tab === "solve" ? "on" : "",
+    onClick: () => setTab("solve")
+  }, "Solver"), /*#__PURE__*/React.createElement("button", {
+    className: tab === "practice" ? "on" : "",
+    onClick: () => setTab("practice")
+  }, "Practice")), tab === "solve" && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-inputs"
+  }, activeFields.map(f => /*#__PURE__*/React.createElement("label", {
+    key: f.key,
+    className: f.wide ? "wide" : ""
+  }, /*#__PURE__*/React.createElement("span", null, f.label), f.options ? /*#__PURE__*/React.createElement("select", {
+    value: inputs[f.key] ?? f.options[0].value,
+    onChange: e => set(f.key, e.target.value)
+  }, f.options.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o.value,
+    value: o.value
+  }, o.label))) : /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "decimal",
+    value: inputs[f.key] ?? "",
+    placeholder: f.placeholder || "",
+    onChange: e => set(f.key, e.target.value)
+  })))), result.error && /*#__PURE__*/React.createElement("div", {
+    className: "eh-note"
+  }, result.error), /*#__PURE__*/React.createElement("div", {
+    className: "eh-steps"
+  }, result.steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    className: "eh-step",
+    key: i
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-step-title"
+  }, s.title), s.formula ? /*#__PURE__*/React.createElement("div", {
+    className: "eh-formula"
+  }, s.formula) : null, /*#__PURE__*/React.createElement("pre", {
+    className: "eh-work"
+  }, s.work)))), result.answer && /*#__PURE__*/React.createElement("div", {
+    className: "eh-verdict"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-verdict-tag"
+  }, "RESULT"), result.answer)), tab === "practice" && /*#__PURE__*/React.createElement("section", {
+    className: "eh-panel"
+  }, !q && /*#__PURE__*/React.createElement("div", {
+    className: "eh-empty"
+  }, /*#__PURE__*/React.createElement("p", null, cfg.practiceBlurb), /*#__PURE__*/React.createElement("button", {
+    className: "eh-primary",
+    onClick: newQuestion
+  }, "Generate a question")), q && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "eh-question"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-qhead"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtag"
+  }, "QUESTION"), /*#__PURE__*/React.createElement("span", {
+    className: "eh-qtype"
+  }, q.type)), /*#__PURE__*/React.createElement("p", null, q.prompt)), /*#__PURE__*/React.createElement("div", {
+    className: "eh-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "eh-primary",
+    onClick: () => setShowAnswer(v => !v)
+  }, showAnswer ? "Hide worked answer" : "Show worked answer"), /*#__PURE__*/React.createElement("button", {
+    className: "eh-ghost",
+    onClick: loadIntoSolver
+  }, "Open in solver"), /*#__PURE__*/React.createElement("button", {
+    className: "eh-ghost",
+    onClick: newQuestion
+  }, "New question")), showAnswer && qResult && /*#__PURE__*/React.createElement("div", {
+    className: "eh-steps"
+  }, qResult.steps.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    className: "eh-step",
+    key: i
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-step-title"
+  }, s.title), s.formula ? /*#__PURE__*/React.createElement("div", {
+    className: "eh-formula"
+  }, s.formula) : null, /*#__PURE__*/React.createElement("pre", {
+    className: "eh-work"
+  }, s.work))), qResult.answer && /*#__PURE__*/React.createElement("div", {
+    className: "eh-verdict"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-verdict-tag"
+  }, "ANSWER"), qResult.answer)))));
+}
+
+// Section configs for the five formula-based modules
+const modeField = opts => ({
+  key: "mode",
+  label: "Question type",
+  options: opts
+});
+const SECTION_CFG = {
+  fuel: {
+    solve: solveFuel,
+    gen: genFuel,
+    defaults: {
+      mode: "endurance",
+      taxi: 3,
+      reserve: 15
+    },
+    practiceBlurb: "Fuel planning: safe endurance, contingency, and final reserve at a named flow.",
+    fields: inp => {
+      const base = [modeField([{
+        value: "endurance",
+        label: "Safe endurance"
+      }, {
+        value: "contingency",
+        label: "Contingency (10% trip)"
+      }, {
+        value: "reserve",
+        label: "Final reserve at named flow"
+      }])];
+      if (inp.mode === "contingency") return [...base, {
+        key: "trip",
+        label: "Trip fuel",
+        placeholder: "180"
+      }];
+      if (inp.mode === "reserve") return [...base, {
+        key: "ff",
+        label: "Fuel flow (USG/hr)",
+        placeholder: "24"
+      }];
+      return [...base, {
+        key: "fob",
+        label: "Fuel on board (USG)",
+        placeholder: "170"
+      }, {
+        key: "taxi",
+        label: "Taxi (USG)",
+        placeholder: "3"
+      }, {
+        key: "reserve",
+        label: "Reserve (USG)",
+        placeholder: "15"
+      }, {
+        key: "ff",
+        label: "Fuel flow (USG/hr)",
+        placeholder: "23"
+      }];
+    }
+  },
+  pnr: {
+    solve: solvePNR,
+    gen: genPNR,
+    defaults: {
+      taxi: 3,
+      reserve: 15
+    },
+    practiceBlurb: "Standard (symmetric) point of no return.",
+    fields: [{
+      key: "fob",
+      label: "Fuel on board (USG)",
+      placeholder: "160"
+    }, {
+      key: "taxi",
+      label: "Taxi (USG)",
+      placeholder: "3"
+    }, {
+      key: "reserve",
+      label: "Reserve (USG)",
+      placeholder: "15"
+    }, {
+      key: "ff",
+      label: "Fuel flow (USG/hr)",
+      placeholder: "23"
+    }, {
+      key: "tas",
+      label: "TAS (kt)",
+      placeholder: "180"
+    }, {
+      key: "wind",
+      label: "Headwind out +ve (kt)",
+      placeholder: "30"
+    }]
+  },
+  etp: {
+    solve: solveETP,
+    gen: genETP,
+    defaults: {},
+    practiceBlurb: "Equi-time point / critical point for normal operations.",
+    fields: [{
+      key: "D",
+      label: "Distance A→B (nm)",
+      placeholder: "500"
+    }, {
+      key: "tas",
+      label: "TAS (kt)",
+      placeholder: "180"
+    }, {
+      key: "wind",
+      label: "Headwind out +ve (kt)",
+      placeholder: "30"
+    }]
+  },
+  climb: {
+    solve: solveClimb,
+    gen: genClimb,
+    defaults: {
+      mode: "tdf",
+      ffTot: 63.4
+    },
+    practiceBlurb: "Climb time/distance/fuel, and climb gradient → ROC.",
+    fields: inp => {
+      const base = [modeField([{
+        value: "tdf",
+        label: "Time / distance / fuel"
+      }, {
+        value: "gradient",
+        label: "Gradient → ROC"
+      }])];
+      if (inp.mode === "gradient") return [...base, {
+        key: "grad",
+        label: "Gradient (%)",
+        placeholder: "5"
+      }, {
+        key: "tas",
+        label: "TAS (kt)",
+        placeholder: "100"
+      }, {
+        key: "wind",
+        label: "Headwind (kt)",
+        placeholder: "10"
+      }];
+      return [...base, {
+        key: "height",
+        label: "Height to climb (ft)",
+        placeholder: "10000"
+      }, {
+        key: "rocB",
+        label: "ROC bottom (ft/min)",
+        placeholder: "1500"
+      }, {
+        key: "rocT",
+        label: "ROC top (ft/min)",
+        placeholder: "1300"
+      }, {
+        key: "tasB",
+        label: "TAS bottom (kt)",
+        placeholder: "105"
+      }, {
+        key: "tasT",
+        label: "TAS top (kt)",
+        placeholder: "120"
+      }, {
+        key: "ffTot",
+        label: "Climb FF (USG/hr)",
+        placeholder: "63.4"
+      }];
+    }
+  },
+  maxwt: {
+    solve: solveMaxWt,
+    gen: genMaxWt,
+    defaults: {
+      mode: "maxTOW"
+    },
+    practiceBlurb: "Max take-off weight (limiting-weight cascade) and max cargo.",
+    fields: inp => {
+      const base = [modeField([{
+        value: "maxTOW",
+        label: "Max take-off weight"
+      }, {
+        value: "maxCargo",
+        label: "Max cargo"
+      }])];
+      if (inp.mode === "maxCargo") return [...base, {
+        key: "tow",
+        label: "Take-off weight (kg)",
+        placeholder: "2860"
+      }, {
+        key: "usg",
+        label: "Fuel (USG)",
+        placeholder: "110"
+      }, {
+        key: "ew",
+        label: "Empty weight (kg)",
+        placeholder: "1980"
+      }, {
+        key: "pax",
+        label: "Passengers",
+        placeholder: "3"
+      }];
+      return [...base, {
+        key: "ff",
+        label: "Flight fuel (kg)",
+        placeholder: "106"
+      }, {
+        key: "other",
+        label: "Other fuel: reserve+cont (kg)",
+        placeholder: "166"
+      }];
+    }
+  }
+};
+const SECTIONS = [{
+  key: "wb",
+  label: "Weight & Balance",
+  short: "W&B",
+  desc: "Echo loading system"
+}, {
+  key: "maxwt",
+  label: "Max weight / payload / fuel",
+  short: "Max wt",
+  desc: "Limiting-weight cascade"
+}, {
+  key: "fuel",
+  label: "Fuel planning",
+  short: "Fuel",
+  desc: "Endurance · reserves"
+}, {
+  key: "pnr",
+  label: "Point of no return",
+  short: "PNR",
+  desc: "Standard PNR"
+}, {
+  key: "etp",
+  label: "ETP / critical point",
+  short: "ETP",
+  desc: "Equi-time point"
+}, {
+  key: "climb",
+  label: "Climb & cruise",
+  short: "Climb",
+  desc: "Time · distance · fuel"
+}];
+
+/* ── APP SHELL with sidebar ───────────────────────────────────────────────── */
+function EchoLoadingHelper() {
+  const [section, setSection] = useState("wb");
+  const [navOpen, setNavOpen] = useState(false);
+  const current = SECTIONS.find(s => s.key === section);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "eh-root"
+  }, /*#__PURE__*/React.createElement("style", null, CSS), /*#__PURE__*/React.createElement("header", {
+    className: "eh-head"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "eh-hamburger",
+    onClick: () => setNavOpen(v => !v),
+    "aria-label": "menu"
+  }, "\u2630"), /*#__PURE__*/React.createElement("div", {
+    className: "eh-badge"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-badge-ltf"
+  }, "LTF"), /*#__PURE__*/React.createElement("span", {
+    className: "eh-badge-echo"
+  }, "ECHO")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", null, "CFPA Study Helper"), /*#__PURE__*/React.createElement("p", {
+    className: "eh-sub"
+  }, "Learn To Fly Melbourne \xB7 YMMB Moorabbin \xB7 CPL Flight Planning \xB7 Loading System Echo")), /*#__PURE__*/React.createElement("div", {
+    className: "eh-tail"
+  }, "VH-ECHO")), /*#__PURE__*/React.createElement("div", {
+    className: "eh-shell"
+  }, /*#__PURE__*/React.createElement("aside", {
+    className: navOpen ? "eh-side open" : "eh-side"
+  }, SECTIONS.map(s => /*#__PURE__*/React.createElement("button", {
+    key: s.key,
+    className: section === s.key ? "eh-navitem on" : "eh-navitem",
+    onClick: () => {
+      setSection(s.key);
+      setNavOpen(false);
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "eh-navlabel"
+  }, s.label), /*#__PURE__*/React.createElement("span", {
+    className: "eh-navdesc"
+  }, s.desc)))), /*#__PURE__*/React.createElement("main", {
+    className: "eh-main"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eh-sectionhead"
+  }, /*#__PURE__*/React.createElement("h2", null, current.label)), section === "wb" ? /*#__PURE__*/React.createElement(WBSection, null) : /*#__PURE__*/React.createElement(GenericSection, {
+    cfg: SECTION_CFG[section],
+    key: section
+  }))), /*#__PURE__*/React.createElement("footer", {
+    className: "eh-version"
+  }, APP_VERSION.tag, " \xB7 ", APP_VERSION.date, " \xB7 ", APP_VERSION.note));
+}
 const CSS = `
 .eh-root{
   --bg:#0a1526; --panel:#0f1d33; --panel2:#152741; --line:#243c5c;
@@ -1233,6 +2006,26 @@ const CSS = `
 .eh-tail{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.18em;
   color:var(--amber2);border:1px solid var(--line);padding:6px 10px;border-radius:6px;align-self:flex-start}
 @media (max-width:560px){.eh-tail{display:none}}
+.eh-hamburger{display:none;background:none;border:1px solid var(--line);color:var(--ink);
+  font-size:18px;border-radius:8px;padding:4px 10px;cursor:pointer;line-height:1}
+.eh-shell{display:grid;grid-template-columns:210px 1fr;gap:16px;align-items:start}
+.eh-side{display:flex;flex-direction:column;gap:6px;position:sticky;top:16px}
+.eh-navitem{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--panel);
+  border:1px solid var(--line);border-radius:9px;padding:11px 13px;cursor:pointer;transition:.15s}
+.eh-navitem:hover{border-color:var(--amber)}
+.eh-navitem.on{border-color:var(--amber);background:var(--panel2);box-shadow:inset 3px 0 0 var(--amber)}
+.eh-navlabel{font-size:13.5px;font-weight:600;color:var(--ink)}
+.eh-navdesc{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.eh-navitem.on .eh-navlabel{color:var(--amber2)}
+.eh-main{min-width:0}
+.eh-sectionhead{margin-bottom:12px}
+.eh-sectionhead h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.01em}
+@media (max-width:720px){
+  .eh-shell{grid-template-columns:1fr}
+  .eh-hamburger{display:block}
+  .eh-side{display:none;position:static}
+  .eh-side.open{display:flex;margin-bottom:8px}
+}
 .eh-tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line)}
 .eh-tabs button{background:none;border:none;color:var(--dim);font-family:var(--mono);
   font-size:13px;letter-spacing:.03em;padding:9px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
@@ -1241,7 +2034,7 @@ const CSS = `
 .eh-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
 .eh-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
 .eh-inputs label{display:flex;flex-direction:column;gap:6px}
-.eh-inputs label:last-child{grid-column:1 / -1}
+.eh-inputs label.wide{grid-column:1 / -1}
 .eh-inputs span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-family:var(--mono)}
 .eh-inputs input,.eh-inputs select{background:var(--bg);border:1px solid var(--line);color:var(--ink);
   border-radius:8px;padding:11px 12px;font-family:var(--mono);font-size:15px;outline:none;transition:.15s}
